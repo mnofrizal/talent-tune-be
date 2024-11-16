@@ -1,0 +1,78 @@
+### Variables
+@baseUrl = http://localhost:2100/api/v1/auth/login
+@authToken = {{login.response.body.data.accessToken}}
+
+### Register new user
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+    "email": "newuser@example.com",
+    "password": "password123",
+    "name": "New User",
+    "nip": "456789123",
+    "phone": "081234567892",
+    "systemRole": "USER",
+    "jabatan": "Staff",
+    "bidang": "Finance"
+}
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "newuser@example.com",
+    "password": "password123"
+}
+
+### Get current user profile
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{authToken}}
+
+### Refresh token
+POST {{baseUrl}}/auth/refresh-token
+
+### Logout
+POST {{baseUrl}}/auth/logout
+
+### Protected Routes Examples
+
+### Get all users (Protected)
+GET {{baseUrl}}/users
+Authorization: Bearer {{authToken}}
+
+### Get user by ID (Protected)
+GET {{baseUrl}}/users/1
+Authorization: Bearer {{authToken}}
+
+### Create new user (Protected, Admin only)
+POST {{baseUrl}}/users
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "email": "another@example.com",
+    "password": "password123",
+    "name": "Another User",
+    "nip": "789123456",
+    "systemRole": "USER",
+    "jabatan": "Staff",
+    "bidang": "HR"
+}
+
+### Update user (Protected)
+PUT {{baseUrl}}/users/1
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "phone": "081234567899",
+    "jabatan": "Senior Staff",
+    "bidang": "Finance"
+}
+
+### Delete user (Protected, Admin only)
+DELETE {{baseUrl}}/users/1
+Authorization: Bearer {{authToken}}

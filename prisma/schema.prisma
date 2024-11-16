@@ -1,0 +1,147 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SystemRole {
+  ADMINISTRATOR
+  USER
+}
+
+enum AssessmentStatus {
+  CREATED
+  SCHEDULED
+  WAITING_CONFIRMATION
+  TALENT_REQUIREMENTS
+  READY_FOR_ASSESSMENT
+  EVALUATING
+  NEED_REVIEW
+  DONE
+}
+
+enum AssessmentRoleType {
+  PARTICIPANT
+  EVALUATOR
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  phone        String?
+  password     String
+  name         String
+  nip          String     @unique
+  systemRole   SystemRole @default(USER)
+  jabatan      String
+  bidang       String
+  refreshToken String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  participations AssessmentParticipant[]
+
+  @@map("users")
+}
+
+model AssessmentRole {
+  id          Int                @id @default(autoincrement())
+  name        AssessmentRoleType
+  description String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  // Relations
+  participants AssessmentParticipant[]
+
+  @@map("assessment_roles")
+}
+
+model Assessment {
+  id                Int              @id @default(autoincrement())
+  judul             String
+  materi            String
+  proyeksi          String
+  metodePelaksanaan String
+  ruangan           String
+  linkMeeting       String?
+  notaDinas         String
+  schedule          DateTime
+  expiredDate       DateTime
+  status            AssessmentStatus @default(CREATED)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  participants AssessmentParticipant[]
+  submissions  UserSubmission[]
+  evaluations  Evaluation[]
+
+  @@map("assessments")
+}
+
+model AssessmentParticipant {
+  id               Int      @id @default(autoincrement())
+  assessmentId     Int
+  userId           Int
+  assessmentRoleId Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  assessment          Assessment       @relation(fields: [assessmentId], references: [id])
+  user                User             @relation(fields: [userId], references: [id])
+  assessmentRole      AssessmentRole   @relation(fields: [assessmentRoleId], references: [id])
+  submissions         UserSubmission[]
+  evaluationsGiven    Evaluation[]     @relation("evaluator")
+  evaluationsReceived Evaluation[]     @relation("participant")
+
+  @@unique([assessmentId, userId])
+  @@map("assessment_participants")
+}
+
+model UserSubmission {
+  id                     Int       @id @default(autoincrement())
+  assessmentId           Int
+  participantId          Int
+  pptxFile               String
+  attendanceConfirmation Boolean   @default(false)
+  questionnaireResponses Json // Store 5 question responses
+  submittedAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  // Relations
+  assessment  Assessment            @relation(fields: [assessmentId], references: [id])
+  participant AssessmentParticipant @relation(fields: [participantId], references: [id])
+
+  @@unique([assessmentId, participantId])
+  @@map("user_submissions")
+}
+
+model Evaluation {
+  id                       Int       @id @default(autoincrement())
+  assessmentId             Int
+  evaluatorParticipantId   Int
+  userParticipantId        Int
+  aspectScores             Json // Store 4 aspects with scores and comments
+  conclusionRecommendation String    @db.Text
+  submittedAt              DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  // Relations
+  assessment  Assessment            @relation(fields: [assessmentId], references: [id])
+  evaluator   AssessmentParticipant @relation("evaluator", fields: [evaluatorParticipantId], references: [id])
+  participant AssessmentParticipant @relation("participant", fields: [userParticipantId], references: [id])
+
+  @@unique([assessmentId, evaluatorParticipantId, userParticipantId])
+  @@map("evaluations")
+}
