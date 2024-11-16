@@ -69,9 +69,9 @@ model Assessment {
   materi            String
   proyeksi          String
   metodePelaksanaan String
-  ruangan           String
+  ruangan           String?
   linkMeeting       String?
-  notaDinas         String
+  notaDinas         String?
   schedule          DateTime
   expiredDate       DateTime
   status            AssessmentStatus @default(CREATED)
@@ -96,12 +96,12 @@ model AssessmentParticipant {
   updatedAt        DateTime @updatedAt
 
   // Relations
-  assessment          Assessment       @relation(fields: [assessmentId], references: [id])
-  user                User             @relation(fields: [userId], references: [id])
-  assessmentRole      AssessmentRole   @relation(fields: [assessmentRoleId], references: [id])
-  submissions         UserSubmission[]
-  evaluationsGiven    Evaluation[]     @relation("evaluator")
-  evaluationsReceived Evaluation[]     @relation("participant")
+  assessment          Assessment      @relation(fields: [assessmentId], references: [id])
+  user                User            @relation(fields: [userId], references: [id])
+  assessmentRole      AssessmentRole  @relation(fields: [assessmentRoleId], references: [id])
+  submission          UserSubmission? @relation("ParticipantSubmission")
+  evaluationsGiven    Evaluation[]    @relation("evaluator")
+  evaluationsReceived Evaluation[]    @relation("participant")
 
   @@unique([assessmentId, userId])
   @@map("assessment_participants")
@@ -110,19 +110,18 @@ model AssessmentParticipant {
 model UserSubmission {
   id                     Int       @id @default(autoincrement())
   assessmentId           Int
-  participantId          Int
-  pptxFile               String
-  attendanceConfirmation Boolean   @default(false)
-  questionnaireResponses Json // Store 5 question responses
+  participantId          Int       @unique // Make this unique for one-to-one relation
+  pptxFile               String?
+  attendanceConfirmation Boolean?  @default(false)
+  questionnaireResponses Json?
   submittedAt            DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
   // Relations
   assessment  Assessment            @relation(fields: [assessmentId], references: [id])
-  participant AssessmentParticipant @relation(fields: [participantId], references: [id])
+  participant AssessmentParticipant @relation("ParticipantSubmission", fields: [participantId], references: [id])
 
-  @@unique([assessmentId, participantId])
   @@map("user_submissions")
 }
 
@@ -131,8 +130,8 @@ model Evaluation {
   assessmentId             Int
   evaluatorParticipantId   Int
   userParticipantId        Int
-  aspectScores             Json // Store 4 aspects with scores and comments
-  conclusionRecommendation String    @db.Text
+  aspectScores             Json?
+  conclusionRecommendation String?   @db.Text
   submittedAt              DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt

@@ -3,13 +3,17 @@ import jwt from "jsonwebtoken";
 import { prisma } from "../config/prisma.js";
 import { CustomError } from "../utils/customError.js";
 import { StatusCodes } from "http-status-codes";
+import { AUTH, ERROR_MESSAGES } from "../config/constants.js";
 
 export const authService = {
   login: async ({ email, password }) => {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new CustomError("Invalid credentials", StatusCodes.UNAUTHORIZED);
+      throw new CustomError(
+        ERROR_MESSAGES.AUTH.INVALID_CREDENTIALS,
+        StatusCodes.UNAUTHORIZED
+      );
     }
 
     const accessToken = generateAccessToken(user.id);
@@ -26,15 +30,26 @@ export const authService = {
   },
 
   register: async (userData) => {
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [{ email: userData.email }, { nip: userData.nip }],
-      },
+    // Check for existing email
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: userData.email },
     });
 
-    if (existingUser) {
+    if (existingEmail) {
       throw new CustomError(
-        "User with this email or NIP already exists",
+        ERROR_MESSAGES.AUTH.EMAIL_EXISTS,
+        StatusCodes.CONFLICT
+      );
+    }
+
+    // Check for existing NIP
+    const existingNIP = await prisma.user.findUnique({
+      where: { nip: userData.nip },
+    });
+
+    if (existingNIP) {
+      throw new CustomError(
+        ERROR_MESSAGES.AUTH.NIP_EXISTS,
         StatusCodes.CONFLICT
       );
     }
@@ -54,7 +69,10 @@ export const authService = {
 
   refreshToken: async (refreshToken) => {
     if (!refreshToken) {
-      throw new CustomError("Refresh token required", StatusCodes.UNAUTHORIZED);
+      throw new CustomError(
+        ERROR_MESSAGES.AUTH.REFRESH_TOKEN_REQUIRED,
+        StatusCodes.UNAUTHORIZED
+      );
     }
 
     try {
@@ -65,7 +83,7 @@ export const authService = {
 
       if (!user || !(await bcrypt.compare(refreshToken, user.refreshToken))) {
         throw new CustomError(
-          "Invalid refresh token",
+          ERROR_MESSAGES.AUTH.REFRESH_TOKEN_INVALID,
           StatusCodes.UNAUTHORIZED
         );
       }
@@ -81,17 +99,28 @@ export const authService = {
 
       return { accessToken, newRefreshToken };
     } catch (error) {
-      throw new CustomError("Invalid refresh token", StatusCodes.UNAUTHORIZED);
+      if (error.name === "TokenExpiredError") {
+        throw new CustomError(
+          ERROR_MESSAGES.AUTH.TOKEN_EXPIRED,
+          StatusCodes.UNAUTHORIZED
+        );
+      }
+      throw new CustomError(
+        ERROR_MESSAGES.AUTH.REFRESH_TOKEN_INVALID,
+        StatusCodes.UNAUTHORIZED
+      );
     }
   },
 };
 
 const generateAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: AUTH.ACCESS_TOKEN_EXPIRES,
+  });
 };
 
 const generateRefreshToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
+    expiresIn: AUTH.REFRESH_TOKEN_EXPIRES,
   });
 };

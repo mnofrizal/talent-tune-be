@@ -5,6 +5,7 @@ import {
   validateLogin,
   validateRegister,
 } from "../validators/authValidator.js";
+import { AUTH, SUCCESS_MESSAGES } from "../config/constants.js";
 
 export const authController = {
   login: asyncHandler(async (req, res) => {
@@ -18,16 +19,23 @@ export const authController = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: AUTH.COOKIE_MAX_AGE,
     });
 
-    res.json(successResponse("Login successful", { accessToken, user }));
+    res.json(
+      successResponse(SUCCESS_MESSAGES.AUTH.LOGIN_SUCCESS, {
+        accessToken,
+        user,
+      })
+    );
   }),
 
   register: asyncHandler(async (req, res) => {
     const validatedData = validateRegister(req.body);
     const user = await authService.register(validatedData);
-    res.status(201).json(successResponse("Registration successful", user));
+    res
+      .status(201)
+      .json(successResponse(SUCCESS_MESSAGES.AUTH.REGISTER_SUCCESS, user));
   }),
 
   refreshToken: asyncHandler(async (req, res) => {
@@ -40,18 +48,22 @@ export const authController = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: AUTH.COOKIE_MAX_AGE,
     });
 
-    res.json(successResponse("Token refreshed successfully", { accessToken }));
+    res.json(
+      successResponse(SUCCESS_MESSAGES.AUTH.TOKEN_REFRESHED, { accessToken })
+    );
   }),
 
   logout: asyncHandler(async (req, res) => {
     res.clearCookie("refreshToken");
-    res.json(successResponse("Logged out successfully"));
+    res.json(successResponse(SUCCESS_MESSAGES.AUTH.LOGOUT_SUCCESS));
   }),
 
   me: asyncHandler(async (req, res) => {
-    res.json(successResponse("User profile retrieved successfully", req.user));
+    res.json(
+      successResponse(SUCCESS_MESSAGES.AUTH.PROFILE_RETRIEVED, req.user)
+    );
   }),
 };

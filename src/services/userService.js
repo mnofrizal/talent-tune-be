@@ -1,20 +1,54 @@
+import bcrypt from "bcryptjs";
 import { prisma } from "../config/prisma.js";
-
-import { StatusCodes } from "http-status-codes";
 import { CustomError } from "../utils/customError.js";
+import { StatusCodes } from "http-status-codes";
+import { ERROR_MESSAGES } from "../config/constants.js";
+
+const excludeFields = {
+  password: false,
+  refreshToken: false,
+};
 
 export const userService = {
   getUsers: async () => {
-    return prisma.user.findMany();
+    return prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        systemRole: true,
+        nip: true,
+        jabatan: true,
+        bidang: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   },
 
   getUserById: async (id) => {
     const user = await prisma.user.findUnique({
       where: { id: parseInt(id) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        systemRole: true,
+        nip: true,
+        jabatan: true,
+        bidang: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!user) {
-      throw new CustomError("User not found", StatusCodes.NOT_FOUND);
+      throw new CustomError(
+        ERROR_MESSAGES.AUTH.USER_NOT_FOUND,
+        StatusCodes.NOT_FOUND
+      );
     }
 
     return user;
@@ -22,29 +56,93 @@ export const userService = {
 
   createUser: async (userData) => {
     try {
-      return await prisma.user.create({
-        data: userData,
+      // Check for existing email
+      const existingEmail = await prisma.user.findUnique({
+        where: { email: userData.email },
       });
-    } catch (error) {
-      if (error.code === "P2002") {
+
+      if (existingEmail) {
         throw new CustomError(
-          "A user with this email already exists",
+          ERROR_MESSAGES.AUTH.EMAIL_EXISTS,
           StatusCodes.CONFLICT
         );
       }
-      throw error;
+
+      // Check for existing NIP
+      const existingNIP = await prisma.user.findUnique({
+        where: { nip: userData.nip },
+      });
+
+      if (existingNIP) {
+        throw new CustomError(
+          ERROR_MESSAGES.AUTH.NIP_EXISTS,
+          StatusCodes.CONFLICT
+        );
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+      const user = await prisma.user.create({
+        data: {
+          ...userData,
+          password: hashedPassword,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          systemRole: true,
+          nip: true,
+          jabatan: true,
+          bidang: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return user;
+    } catch (error) {
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Failed to create user",
+        StatusCodes.INTERNAL_SERVER_ERROR
+      );
     }
   },
 
   updateUser: async (id, userData) => {
     try {
-      return await prisma.user.update({
+      // If password is being updated, hash it
+      if (userData.password) {
+        userData.password = await bcrypt.hash(userData.password, 10);
+      }
+
+      const user = await prisma.user.update({
         where: { id: parseInt(id) },
         data: userData,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          systemRole: true,
+          nip: true,
+          jabatan: true,
+          bidang: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
+
+      return user;
     } catch (error) {
       if (error.code === "P2025") {
-        throw new CustomError("User not found", StatusCodes.NOT_FOUND);
+        throw new CustomError(
+          ERROR_MESSAGES.AUTH.USER_NOT_FOUND,
+          StatusCodes.NOT_FOUND
+        );
       }
       throw error;
     }
@@ -52,12 +150,15 @@ export const userService = {
 
   deleteUser: async (id) => {
     try {
-      return await prisma.user.delete({
+      await prisma.user.delete({
         where: { id: parseInt(id) },
       });
     } catch (error) {
       if (error.code === "P2025") {
-        throw new CustomError("User not found", StatusCodes.NOT_FOUND);
+        throw new CustomError(
+          ERROR_MESSAGES.AUTH.USER_NOT_FOUND,
+          StatusCodes.NOT_FOUND
+        );
       }
       throw error;
     }

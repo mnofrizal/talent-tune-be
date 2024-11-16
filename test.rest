@@ -1,5 +1,5 @@
 ### Variables
-@baseUrl = http://localhost:2100/api/v1/auth/login
+@baseUrl = http://localhost:2100/api/v1
 @authToken = {{login.response.body.data.accessToken}}
 
 ### Register new user
@@ -7,11 +7,11 @@ POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
-    "email": "newuser@example.com",
-    "password": "password123",
     "name": "New User",
-    "nip": "456789123",
+    "email": "newuser@example.com",
     "phone": "081234567892",
+    "password": "password123",
+    "nip": "456789123",
     "systemRole": "USER",
     "jabatan": "Staff",
     "bidang": "Finance"
@@ -23,8 +23,8 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-    "email": "newuser@example.com",
-    "password": "password123"
+    "email": "admin@example.com",
+    "password": "admin123"
 }
 
 ### Get current user profile
@@ -53,9 +53,10 @@ Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "email": "another@example.com",
-    "password": "password123",
     "name": "Another User",
+    "email": "another@example.com",
+     "phone": "081234567892",
+    "password": "password123",
     "nip": "789123456",
     "systemRole": "USER",
     "jabatan": "Staff",

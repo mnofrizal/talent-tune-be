@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
 const prisma = new PrismaClient();
 
 async function main() {
@@ -7,7 +9,7 @@ async function main() {
     {
       email: "admin@example.com",
       phone: "081234567890",
-      password: "admin123", // In production, this should be hashed
+      password: "admin123",
       name: "Admin User",
       nip: "123456789",
       systemRole: "ADMINISTRATOR",
@@ -17,7 +19,7 @@ async function main() {
     {
       email: "user@example.com",
       phone: "081234567891",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "Regular User",
       nip: "987654321",
       systemRole: "USER",
@@ -27,7 +29,7 @@ async function main() {
     {
       email: "andi.budimansyah@msdm.app",
       phone: "081234567891",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "ANDI BUDIMANSYAH",
       nip: "881721674I",
       systemRole: "USER",
@@ -37,7 +39,7 @@ async function main() {
     {
       email: "angga.estibrata@msdm.app",
       phone: "081234567892",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "ANGGA ESTIBRATA",
       nip: "921722596I",
       systemRole: "USER",
@@ -47,7 +49,7 @@ async function main() {
     {
       email: "farrid.mahendra@msdm.app",
       phone: "081234567893",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "FARRID TRI MAHENDRA",
       nip: "941722597I",
       systemRole: "USER",
@@ -57,7 +59,7 @@ async function main() {
     {
       email: "putra.yanuar@msdm.app",
       phone: "081234567894",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "PUTRA YANUAR",
       nip: "931721678I",
       systemRole: "USER",
@@ -67,7 +69,7 @@ async function main() {
     {
       email: "rois.mochamad@msdm.app",
       phone: "081234567895",
-      password: "user123", // In production, this should be hashed
+      password: "user123",
       name: "ROIS MOCHAMAD",
       nip: "961831207I",
       systemRole: "USER",
@@ -78,10 +80,14 @@ async function main() {
   ];
 
   for (const user of users) {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
     await prisma.user.upsert({
       where: { email: user.email },
       update: {},
-      create: user,
+      create: {
+        ...user,
+        password: hashedPassword,
+      },
     });
   }
 
