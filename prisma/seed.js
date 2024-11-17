@@ -92,26 +92,6 @@ async function main() {
     });
   }
 
-  // Create assessment roles
-  const assessmentRoles = [
-    {
-      name: "PARTICIPANT",
-      description: "Assessment participant role",
-    },
-    {
-      name: "EVALUATOR",
-      description: "Assessment evaluator role",
-    },
-  ];
-
-  for (const role of assessmentRoles) {
-    await prisma.assessmentRole.upsert({
-      where: { name: role.name },
-      update: {},
-      create: role,
-    });
-  }
-
   console.log("Seed data created successfully");
 }
 

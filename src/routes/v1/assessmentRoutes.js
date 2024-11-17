@@ -7,47 +7,72 @@ const router = express.Router();
 // All routes require authentication
 router.use(protect);
 
-// Routes accessible by both ADMINISTRATOR and USER
+// Assessment Routes - Available to both ADMINISTRATOR and USER
 router.get("/", assessmentController.getAssessments);
 router.get("/:id", assessmentController.getAssessmentById);
+router.get(
+  "/participant/:userId",
+  assessmentController.getParticipantAssessments
+);
+router.get("/evaluator/:userId", assessmentController.getEvaluatorAssessments);
 
-// Routes accessible only by ADMINISTRATOR
+// Assessment Routes - ADMINISTRATOR only
 router.post(
   "/",
   authorize("ADMINISTRATOR"),
   assessmentController.createAssessment
 );
+
 router.put(
   "/:id",
   authorize("ADMINISTRATOR"),
   assessmentController.updateAssessment
 );
+
+router.patch(
+  "/:id/status",
+  authorize("ADMINISTRATOR"),
+  assessmentController.updateAssessmentStatus
+);
+
 router.delete(
   "/:id",
   authorize("ADMINISTRATOR"),
   assessmentController.deleteAssessment
 );
 
-// Participant management
-router.post(
-  "/:id/participants",
-  authorize("ADMINISTRATOR"),
-  assessmentController.addParticipant
-);
-router.delete(
-  "/:id/participants/:participantId",
-  authorize("ADMINISTRATOR"),
-  assessmentController.removeParticipant
-);
-router.patch(
-  "/:id/participants/:participantId/status",
-  authorize("ADMINISTRATOR"),
-  assessmentController.updateParticipantStatus
-);
-router.patch(
-  "/:id/participants/:participantId/schedule",
-  authorize("ADMINISTRATOR"),
-  assessmentController.updateParticipantSchedule
-);
+// // Submission Routes - Available to participants
+// router.post("/:id/submission", assessmentController.submitAssessment);
+
+// router.put("/:id/submission", assessmentController.updateSubmission);
+
+// // Evaluation Routes
+// router.post("/:id/evaluation", assessmentController.createEvaluation);
+
+// router.put(
+//   "/:id/evaluation/:evaluationId",
+//   assessmentController.updateEvaluation
+// );
+
+// router.get("/:id/evaluations", assessmentController.getAssessmentEvaluations);
+
+// // Additional utility routes
+// router.get(
+//   "/statistics/summary",
+//   authorize("ADMINISTRATOR"),
+//   assessmentController.getAssessmentStatistics
+// );
+
+// router.post(
+//   "/:id/reschedule",
+//   authorize("ADMINISTRATOR"),
+//   assessmentController.rescheduleAssessment
+// );
+
+// router.post(
+//   "/:id/cancel",
+//   authorize("ADMINISTRATOR"),
+//   assessmentController.cancelAssessment
+// );
 
 export const assessmentRoutes = router;

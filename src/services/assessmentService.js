@@ -1,392 +1,482 @@
 import { prisma } from "../config/prisma.js";
 import { CustomError } from "../utils/customError.js";
 import { StatusCodes } from "http-status-codes";
-import { ERROR_MESSAGES } from "../config/constants.js";
-import { calculateExpiryDate } from "../utils/dateUtils.js";
 
 export const assessmentService = {
-  getAssessments: async (user) => {
+  async getAssessments({
+    status,
+    metodePelaksanaan,
+    startDate,
+    endDate,
+    participantId,
+    evaluatorId,
+    page = 1,
+    limit = 10,
+    searchTerm = "",
+  }) {
     try {
-      const baseParticipantInclude = {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            nip: true,
-            jabatan: true,
-            bidang: true,
-          },
-        },
-        assessmentRole: true,
+      const skip = (page - 1) * limit;
+      const where = {
+        isActive: true,
+        OR: searchTerm
+          ? [
+              { judul: { contains: searchTerm, mode: "insensitive" } },
+              { materi: { contains: searchTerm, mode: "insensitive" } },
+              { proyeksi: { contains: searchTerm, mode: "insensitive" } },
+            ]
+          : undefined,
+        AND: [],
       };
 
-      // If user is ADMINISTRATOR, return all assessments with all participants
-      if (user.systemRole === "ADMINISTRATOR") {
-        return await prisma.assessment.findMany({
+      if (status) where.AND.push({ status });
+      if (metodePelaksanaan) where.AND.push({ metodePelaksanaan });
+      if (participantId) where.AND.push({ participantId });
+      if (evaluatorId) {
+        where.AND.push({
+          evaluations: {
+            some: { evaluatorId },
+          },
+        });
+      }
+      if (startDate && endDate) {
+        where.AND.push({
+          createdAt: {
+            gte: new Date(startDate),
+            lte: new Date(endDate),
+          },
+        });
+      }
+
+      const [total, assessments] = await prisma.$transaction([
+        prisma.assessment.count({ where }),
+        prisma.assessment.findMany({
+          where,
           include: {
-            participants: {
-              include: baseParticipantInclude,
+            participant: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                nip: true,
+                jabatan: true,
+                bidang: true,
+              },
+            },
+            evaluations: {
+              include: {
+                evaluator: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    nip: true,
+                  },
+                },
+              },
             },
           },
           orderBy: {
             createdAt: "desc",
           },
-        });
-      }
+          skip,
+          take: limit,
+        }),
+      ]);
 
-      // For regular users, return assessments where they are a participant
-      // but only show their own data and evaluators
-      return await prisma.assessment.findMany({
-        where: {
-          participants: {
-            some: {
-              userId: user.id,
-            },
-          },
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        assessments,
+        metadata: {
+          total,
+          page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
         },
-        include: {
-          participants: {
-            where: {
-              OR: [
-                { userId: user.id }, // Include user's own data
-                { assessmentRole: { name: "EVALUATOR" } }, // Include all evaluators
-              ],
-            },
-            include: baseParticipantInclude,
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
+      };
     } catch (error) {
       throw new CustomError(
-        "Failed to fetch assessments",
-        StatusCodes.INTERNAL_SERVER_ERROR
+        "Error fetching assessments",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
       );
     }
   },
 
-  getAssessmentById: async (id, user) => {
+  // Get assessment by ID
+  async getAssessmentById(id) {
     try {
-      const baseParticipantInclude = {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            nip: true,
-            jabatan: true,
-            bidang: true,
-          },
-        },
-        assessmentRole: true,
-        submission: true,
-
-        evaluationsGiven: true,
-
-        evaluationsReceived: true,
-      };
-
       const assessment = await prisma.assessment.findUnique({
-        where: { id: parseInt(id) },
+        where: { id },
         include: {
-          participants: {
-            include: baseParticipantInclude,
+          participant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              nip: true,
+              jabatan: true,
+              bidang: true,
+            },
+          },
+          evaluations: {
+            include: {
+              evaluator: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  nip: true,
+                },
+              },
+            },
           },
         },
       });
 
       if (!assessment) {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.NOT_FOUND,
-          StatusCodes.NOT_FOUND
-        );
-      }
-
-      // If user is not ADMINISTRATOR, filter participants
-      if (user.systemRole !== "ADMINISTRATOR") {
-        const isParticipant = assessment.participants.some(
-          (p) => p.userId === user.id
-        );
-        if (!isParticipant) {
-          throw new CustomError(
-            ERROR_MESSAGES.AUTH.UNAUTHORIZED,
-            StatusCodes.FORBIDDEN
-          );
-        }
-
-        // Filter participants to only show user's own data and evaluators
-        assessment.participants = assessment.participants.filter(
-          (p) => p.userId === user.id || p.assessmentRole.name === "EVALUATOR"
-        );
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
       }
 
       return assessment;
     } catch (error) {
       if (error instanceof CustomError) throw error;
       throw new CustomError(
-        "Failed to fetch assessment",
-        StatusCodes.INTERNAL_SERVER_ERROR
+        "Error fetching assessment",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
       );
     }
   },
 
-  createAssessment: async ({ assessment, participants }) => {
+  // Get assessments for a specific participant
+  async getParticipantAssessments(participantId, page = 1, limit = 10) {
     try {
-      return await prisma.$transaction(async (prisma) => {
-        // Create the assessment
-        const createdAssessment = await prisma.assessment.create({
-          data: {
-            ...assessment,
-            participants: {
-              create: participants.map((participant) => {
-                const data = {
-                  userId: participant.userId,
-                  assessmentRoleId: participant.assessmentRoleId,
-                  participantStatus:
-                    participant.assessmentRoleId === 1 ? "CREATED" : null,
-                };
+      const skip = (page - 1) * limit;
+      const where = {
+        participantId,
+        isActive: true,
+      };
 
-                // Only set schedule and expiredDate for participants with a schedule
-                if (participant.schedule) {
-                  const scheduleDate = new Date(participant.schedule);
-                  data.schedule = scheduleDate;
-                  data.expiredDate = calculateExpiryDate(scheduleDate);
-                }
-
-                return data;
-              }),
-            },
-          },
+      const [total, assessments] = await prisma.$transaction([
+        prisma.assessment.count({ where }),
+        prisma.assessment.findMany({
+          where,
           include: {
-            participants: {
+            evaluations: {
               include: {
-                user: {
+                evaluator: {
                   select: {
                     id: true,
                     name: true,
                     email: true,
                     nip: true,
-                    jabatan: true,
-                    bidang: true,
                   },
                 },
-                assessmentRole: true,
               },
             },
           },
-        });
+          orderBy: {
+            createdAt: "desc",
+          },
+          skip,
+          take: limit,
+        }),
+      ]);
 
-        return createdAssessment;
-      });
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: assessments,
+        metadata: {
+          total,
+          page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
     } catch (error) {
-      // console.log(error);
-      if (error.code === "P2002") {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.PARTICIPANT_EXISTS,
-          StatusCodes.CONFLICT
-        );
-      }
-      throw new CustomError(error, StatusCodes.INTERNAL_SERVER_ERROR);
+      throw new CustomError(
+        "Error fetching participant assessments",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
     }
   },
 
-  updateParticipantSchedule: async (
-    assessmentId,
+  // Get assessments for a specific evaluator
+  async getEvaluatorAssessments(evaluatorId, page = 1, limit = 10) {
+    try {
+      const skip = (page - 1) * limit;
+      const where = {
+        evaluations: {
+          some: {
+            evaluatorId,
+          },
+        },
+        isActive: true,
+      };
+
+      const [total, assessments] = await prisma.$transaction([
+        prisma.assessment.count({ where }),
+        prisma.assessment.findMany({
+          where,
+          include: {
+            participant: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                nip: true,
+                jabatan: true,
+                bidang: true,
+              },
+            },
+            evaluations: {
+              where: {
+                evaluatorId,
+              },
+              include: {
+                evaluator: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    nip: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          skip,
+          take: limit,
+        }),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        data: assessments,
+        metadata: {
+          total,
+          page,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    } catch (error) {
+      throw new CustomError(
+        "Error fetching evaluator assessments",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
+  },
+
+  // Create new assessment
+  async createAssessment(data) {
+    try {
+      const { assessment, evaluators } = data;
+      const { participants, ...assessmentData } = assessment;
+
+      // Get unique participant IDs
+      const participantIds = participants.map((p) => p.participantId);
+
+      // Check if all participants exist
+      const existingParticipants = await prisma.user.findMany({
+        where: {
+          id: {
+            in: participantIds,
+          },
+        },
+      });
+
+      if (existingParticipants.length !== participantIds.length) {
+        throw new CustomError(
+          "One or more participants not found",
+          StatusCodes.NOT_FOUND
+        );
+      }
+
+      // Check if evaluators exist and are valid
+      const evaluatorIds = evaluators.map((e) => e.evaluatorId);
+      const foundEvaluators = await prisma.user.findMany({
+        where: {
+          id: { in: evaluatorIds },
+        },
+      });
+
+      if (foundEvaluators.length !== evaluatorIds.length) {
+        throw new CustomError(
+          "One or more evaluators not found",
+          StatusCodes.NOT_FOUND
+        );
+      }
+
+      // Check for duplicate evaluators
+      if (new Set(evaluatorIds).size !== evaluatorIds.length) {
+        throw new CustomError(
+          "Duplicate evaluators are not allowed",
+          StatusCodes.BAD_REQUEST
+        );
+      }
+
+      // Check if any participant is also an evaluator
+      const participantEvaluatorOverlap = participantIds.some((id) =>
+        evaluatorIds.includes(id)
+      );
+
+      if (participantEvaluatorOverlap) {
+        throw new CustomError(
+          "A participant cannot be an evaluator",
+          StatusCodes.BAD_REQUEST
+        );
+      }
+
+      // Create assessments for each participant with their individual schedules
+      const createdAssessments = await prisma.$transaction(async (tx) => {
+        const assessments = [];
+
+        for (const participant of participants) {
+          // Create the assessment with individual schedule
+          const newAssessment = await tx.assessment.create({
+            data: {
+              ...assessmentData,
+              schedule: new Date(participant.schedule),
+              participant: {
+                connect: { id: participant.participantId },
+              },
+            },
+          });
+
+          // Create evaluations for each evaluator
+          await tx.evaluation.createMany({
+            data: evaluators.map((evaluator) => ({
+              assessmentId: newAssessment.id,
+              evaluatorId: evaluator.evaluatorId,
+              status: "PENDING",
+            })),
+          });
+
+          // Fetch the complete assessment with relations
+          const completeAssessment = await tx.assessment.findUnique({
+            where: { id: newAssessment.id },
+            include: {
+              participant: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  nip: true,
+                  jabatan: true,
+                  bidang: true,
+                },
+              },
+              evaluations: {
+                include: {
+                  evaluator: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                      nip: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          assessments.push(completeAssessment);
+        }
+
+        return assessments;
+      });
+
+      return {
+        createdCount: createdAssessments.length,
+        assessments: createdAssessments,
+      };
+    } catch (error) {
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error creating assessments",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
+  },
+
+  // Add a method to get conflicting schedules
+  async checkScheduleConflicts(
     participantId,
-    scheduleDate
-  ) => {
-    try {
-      const participant = await prisma.assessmentParticipant.findFirst({
-        where: {
-          id: parseInt(participantId),
-          assessmentId: parseInt(assessmentId),
-        },
-        include: {
-          assessmentRole: true,
-        },
-      });
+    schedule,
+    excludeAssessmentId = null
+  ) {
+    const conflictWindow = {
+      start: new Date(schedule),
+      end: new Date(new Date(schedule).getTime() + 2 * 60 * 60 * 1000), // 2 hours window
+    };
 
-      if (!participant) {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.PARTICIPANT_NOT_FOUND,
-          StatusCodes.NOT_FOUND
-        );
-      }
+    const where = {
+      participantId,
+      schedule: {
+        gte: conflictWindow.start,
+        lte: conflictWindow.end,
+      },
+      status: {
+        notIn: ["CANCELED", "DONE"],
+      },
+    };
 
-      // Check if the participant is actually a participant (not an evaluator)
-      if (participant.assessmentRole.name !== "PARTICIPANT") {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.SCHEDULE_UPDATE_NOT_ALLOWED,
-          StatusCodes.BAD_REQUEST
-        );
-      }
-
-      const schedule = new Date(scheduleDate);
-      const expiredDate = calculateExpiryDate(schedule);
-
-      return await prisma.assessmentParticipant.update({
-        where: { id: parseInt(participantId) },
-        data: {
-          schedule,
-          expiredDate,
-          participantStatus: "SCHEDULED",
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              nip: true,
-              jabatan: true,
-              bidang: true,
-            },
-          },
-          assessmentRole: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof CustomError) throw error;
-      throw new CustomError(
-        "Failed to update participant schedule",
-        StatusCodes.INTERNAL_SERVER_ERROR
-      );
+    if (excludeAssessmentId) {
+      where.id = { not: excludeAssessmentId };
     }
+
+    const conflicts = await prisma.assessment.findMany({
+      where,
+      select: {
+        id: true,
+        schedule: true,
+        judul: true,
+      },
+    });
+
+    return conflicts;
   },
 
-  deleteAssessment: async (id) => {
-    try {
-      await prisma.assessment.delete({
-        where: { id: parseInt(id) },
-      });
-    } catch (error) {
-      if (error.code === "P2025") {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.NOT_FOUND,
-          StatusCodes.NOT_FOUND
-        );
-      }
-      throw new CustomError(
-        "Failed to delete assessment",
-        StatusCodes.INTERNAL_SERVER_ERROR
-      );
-    }
-  },
-
-  updateParticipantStatus: async (assessmentId, participantId, status) => {
-    try {
-      const participant = await prisma.assessmentParticipant.findFirst({
-        where: {
-          id: parseInt(participantId),
-          assessmentId: parseInt(assessmentId),
-        },
-        include: {
-          assessmentRole: true,
-        },
-      });
-
-      if (!participant) {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.PARTICIPANT_NOT_FOUND,
-          StatusCodes.NOT_FOUND
-        );
-      }
-
-      // Check if the participant is actually a participant (not an evaluator)
-      if (participant.assessmentRole.name !== "PARTICIPANT") {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.STATUS_UPDATE_NOT_ALLOWED,
-          StatusCodes.BAD_REQUEST
-        );
-      }
-
-      return await prisma.assessmentParticipant.update({
-        where: { id: parseInt(participantId) },
-        data: { participantStatus: status },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              nip: true,
-              jabatan: true,
-              bidang: true,
-            },
-          },
-          assessmentRole: true,
-        },
-      });
-    } catch (error) {
-      if (error instanceof CustomError) throw error;
-      throw new CustomError(
-        "Failed to update participant status",
-        StatusCodes.INTERNAL_SERVER_ERROR
-      );
-    }
-  },
-
-  addParticipant: async (assessmentId, participantData) => {
+  // Update assessment
+  async updateAssessment(id, data) {
+    console.log({ data });
     try {
       const assessment = await prisma.assessment.findUnique({
-        where: { id: parseInt(assessmentId) },
+        where: { id },
       });
 
       if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      // Prevent updates if assessment is in certain statuses
+      const restrictedStatuses = ["DONE", "CANCELED"];
+      if (restrictedStatuses.includes(assessment.status)) {
         throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.NOT_FOUND,
-          StatusCodes.NOT_FOUND
+          `Cannot update assessment in ${assessment.status} status`,
+          StatusCodes.BAD_REQUEST
         );
       }
 
-      const existingParticipant = await prisma.assessmentParticipant.findFirst({
-        where: {
-          assessmentId: parseInt(assessmentId),
-          userId: participantData.userId,
-        },
-      });
-
-      if (existingParticipant) {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.PARTICIPANT_EXISTS,
-          StatusCodes.CONFLICT
-        );
-      }
-
-      const assessmentRole = await prisma.assessmentRole.findUnique({
-        where: { id: participantData.assessmentRoleId },
-      });
-
-      if (!assessmentRole) {
-        throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.ROLE_NOT_FOUND,
-          StatusCodes.NOT_FOUND
-        );
-      }
-
-      const data = {
-        assessmentId: parseInt(assessmentId),
-        userId: participantData.userId,
-        assessmentRoleId: participantData.assessmentRoleId,
-        participantStatus:
-          assessmentRole.name === "PARTICIPANT" ? "CREATED" : null,
-      };
-
-      // Add schedule and expiredDate if provided and it's a participant
-      if (participantData.schedule && assessmentRole.name === "PARTICIPANT") {
-        const scheduleDate = new Date(participantData.schedule);
-        data.schedule = scheduleDate;
-        data.expiredDate = calculateExpiryDate(scheduleDate);
-        data.participantStatus = "SCHEDULED";
-      }
-
-      const participant = await prisma.assessmentParticipant.create({
+      return await prisma.assessment.update({
+        where: { id },
         data,
         include: {
-          user: {
+          participant: {
             select: {
               id: true,
               name: true,
@@ -396,45 +486,146 @@ export const assessmentService = {
               bidang: true,
             },
           },
-          assessmentRole: true,
+          evaluations: {
+            include: {
+              evaluator: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  nip: true,
+                },
+              },
+            },
+          },
         },
       });
-
-      return participant;
     } catch (error) {
       if (error instanceof CustomError) throw error;
       throw new CustomError(
-        "Failed to add participant",
-        StatusCodes.INTERNAL_SERVER_ERROR
+        "Error updating assessment",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
       );
     }
   },
 
-  removeParticipant: async (assessmentId, participantId) => {
+  // Update assessment status
+  async updateAssessmentStatus(id, status) {
     try {
-      const participant = await prisma.assessmentParticipant.findFirst({
-        where: {
-          id: parseInt(participantId),
-          assessmentId: parseInt(assessmentId),
+      const assessment = await prisma.assessment.findUnique({
+        where: { id },
+        include: {
+          evaluations: true,
         },
       });
 
-      if (!participant) {
+      if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      // Status transition validation
+      const statusTransitions = {
+        CREATED: ["SCHEDULED", "CANCELED"],
+        SCHEDULED: ["WAITING_CONFIRMATION", "RESCHEDULE", "CANCELED"],
+        WAITING_CONFIRMATION: ["TALENT_REQUIREMENTS", "RESCHEDULE", "CANCELED"],
+        TALENT_REQUIREMENTS: ["READY_FOR_ASSESSMENT", "RESCHEDULE", "CANCELED"],
+        READY_FOR_ASSESSMENT: ["EVALUATING", "RESCHEDULE", "CANCELED"],
+        EVALUATING: ["NEED_REVIEW", "CANCELED"],
+        NEED_REVIEW: ["DONE", "EVALUATING", "CANCELED"],
+        DONE: [],
+        CANCELED: ["CREATED"],
+        RESCHEDULE: ["SCHEDULED"],
+      };
+
+      const allowedTransitions = statusTransitions[assessment.status];
+      if (!allowedTransitions.includes(status)) {
         throw new CustomError(
-          ERROR_MESSAGES.ASSESSMENT.PARTICIPANT_NOT_FOUND,
-          StatusCodes.NOT_FOUND
+          `Invalid status transition from ${assessment.status} to ${status}`,
+          StatusCodes.BAD_REQUEST
         );
       }
 
-      await prisma.assessmentParticipant.delete({
-        where: { id: parseInt(participantId) },
+      // Additional validations based on status
+      if (status === "EVALUATING") {
+        if (assessment.evaluations.length < 1) {
+          throw new CustomError(
+            "Cannot move to EVALUATING status without evaluators",
+            StatusCodes.BAD_REQUEST
+          );
+        }
+      }
+
+      if (status === "DONE") {
+        // Check if all evaluations are completed
+        const pendingEvaluations = assessment.evaluations.some(
+          (evaluation) => evaluation.status !== "COMPLETED"
+        );
+
+        if (pendingEvaluations) {
+          throw new CustomError(
+            "Cannot mark assessment as DONE with pending evaluations",
+            StatusCodes.BAD_REQUEST
+          );
+        }
+      }
+
+      return await prisma.assessment.update({
+        where: { id },
+        data: { status },
+        include: {
+          participant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              nip: true,
+              jabatan: true,
+              bidang: true,
+            },
+          },
+          evaluations: {
+            include: {
+              evaluator: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  nip: true,
+                },
+              },
+            },
+          },
+        },
       });
     } catch (error) {
       if (error instanceof CustomError) throw error;
       throw new CustomError(
-        "Failed to remove participant",
-        StatusCodes.INTERNAL_SERVER_ERROR
+        "Error updating assessment status",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
       );
     }
+  },
+
+  // Delete assessment
+  async deleteAssessment(id) {
+    const assessment = await prisma.assessment.findUnique({
+      where: { id },
+    });
+
+    if (!assessment) {
+      throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+    }
+
+    // Delete associated evaluations first
+    await prisma.evaluation.deleteMany({
+      where: { assessmentId: id },
+    });
+
+    // Then delete the assessment
+    return await prisma.assessment.delete({
+      where: { id },
+    });
   },
 };

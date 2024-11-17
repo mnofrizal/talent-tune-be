@@ -88,92 +88,273 @@ Authorization: Bearer {{authToken}}
 GET {{baseUrl}}/assessments
 Authorization: Bearer {{authToken}}
 
-### Get assessment by ID
-GET {{baseUrl}}/assessments/4
+### Get assessments with pagination and filters
+GET {{baseUrl}}/assessments?page=1&limit=10&status=CREATED&metodePelaksanaan=ONLINE&startDate=2024-01-01&endDate=2024-12-31&searchTerm=leadership
 Authorization: Bearer {{authToken}}
 
-### Create new assessment with participants
+### Get assessment by ID
+GET {{baseUrl}}/assessments/2
+Authorization: Bearer {{authToken}}
+
+### Get participant's assessments
+GET {{baseUrl}}/assessments/participant/1?page=1&limit=10
+Authorization: Bearer {{authToken}}
+
+### Get evaluator's assessments
+GET {{baseUrl}}/assessments/evaluator/1?page=1&limit=10
+Authorization: Bearer {{authToken}}
+
+### Create new assessment with evaluators (Admin only)
 POST {{baseUrl}}/assessments
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "assessment": {
-        "judul": "Leadership Assessment 2024",
-        "materi": "Leadership Skills and Management",
-        "proyeksi": "Senior Manager Position",
-        "metodePelaksanaan": "Hybrid (Online and Offline)",
-        "ruangan": "Meeting Room A",
-        "linkMeeting": "https://meet.google.com/xyz",
-        "notaDinas": "ND-001/HR/2024",
-        "isActive": true
-    },
+  "assessment": {
+    "judul": "Leadership Assessment Q1 2024",
+    "materi": "Leadership Competency Evaluation",
+    "proyeksi": "Senior Manager Position",
+    "metodePelaksanaan": "HYBRID",
+    "ruangan": "Meeting Room A",
+    "linkMeeting": "https://meet.example.com/assessment",
+    "notaDinas": "ND-001/HR/2024",
     "participants": [
-        {
-            "userId": 2,
-            "assessmentRoleId": 1,
-            "schedule": "2024-03-01T09:00:00Z"
-        },
-        {
-            "userId": 3,
-            "assessmentRoleId": 2
-        }
-    ]
+      {
+        "participantId": 1,
+        "schedule": "2023-12-20T11:00:00Z"
+      },
+      {
+        "participantId": 4,
+        "schedule": "2023-12-20T11:00:00Z"
+      },
+      {
+        "participantId": 5,
+        "schedule": "2023-12-20T11:00:00Z"
+      }
+    ],
+    "isActive": true
+  },
+  "evaluators": [
+    {
+      "evaluatorId": 2
+    },
+    {
+      "evaluatorId": 3
+    }
+  ]
 }
 
-### Update assessment
+
+
+### Update assessment (Admin only)
 PUT {{baseUrl}}/assessments/1
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "judul": "Updated Leadership Assessment 2024",
-    "materi": "Advanced Leadership Skills",
-    "metodePelaksanaan": "Online Only",
-    "linkMeeting": "https://meet.google.com/abc"
+  "judul": "Updated Leadership Assessment Q1 2024",
+  "materi": "Updated Leadership Competency Evaluation",
+  "metodePelaksanaan": "ONLINE",
+  "ruangan": "Virtual Room",
+  "linkMeeting": "https://meet.example.com/assessment-updated"
 }
 
-### Update participant status
-PATCH {{baseUrl}}/assessments/1/participants/1/status
+### Update assessment with questionnaire responses
+PUT {{baseUrl}}/assessments/3
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "status": "WAITING_CONFIRMATION"
+  "presentationFile": "",
+  "attendanceConfirmation": false,
+  "questionnaireResponses": null
 }
 
-### Update participant schedule
-PATCH {{baseUrl}}/assessments/1/participants/1/schedule
+### Update assessment status (Admin only)
+PATCH {{baseUrl}}/assessments/1/status
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "schedule": "2024-03-01T09:00:00Z"
+  "status": "SCHEDULED"
 }
 
-### Add participant to assessment
-POST {{baseUrl}}/assessments/1/participants
+### Status Transition Tests
+
+### Move to WAITING_CONFIRMATION
+PATCH {{baseUrl}}/assessments/1/status
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "userId": 4,
-    "assessmentRoleId": 1,
-    "schedule": "2024-03-15T09:00:00Z"
+  "status": "WAITING_CONFIRMATION"
 }
 
-### Remove participant from assessment
-DELETE {{baseUrl}}/assessments/1/participants/1
+### Move to TALENT_REQUIREMENTS
+PATCH {{baseUrl}}/assessments/1/status
 Authorization: Bearer {{authToken}}
-
-### Delete assessment
-DELETE {{baseUrl}}/assessments/6
-Authorization: Bearer {{authToken}}
-
-### Refresh Token
-POST {{baseUrl}}/auth/refresh-token
 Content-Type: application/json
 
-### Logout
-POST {{baseUrl}}/auth/logout
+{
+  "status": "TALENT_REQUIREMENTS"
+}
+
+### Move to READY_FOR_ASSESSMENT
+PATCH {{baseUrl}}/assessments/1/status
 Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "READY_FOR_ASSESSMENT"
+}
+
+### Move to EVALUATING
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "EVALUATING"
+}
+
+### Move to NEED_REVIEW
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "NEED_REVIEW"
+}
+
+### Move to DONE
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "DONE"
+}
+
+### Cancel assessment
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "CANCELED"
+}
+
+### Reschedule assessment
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "RESCHEDULE"
+}
+
+### Add evaluator to assessment
+POST {{baseUrl}}/assessments/1/evaluators
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "evaluatorId": 4
+}
+
+### Remove evaluator from assessment
+DELETE {{baseUrl}}/assessments/1/evaluators/4
+Authorization: Bearer {{authToken}}
+
+### Delete assessment (Admin only)
+DELETE {{baseUrl}}/assessments/7
+Authorization: Bearer {{authToken}}
+
+### Error Test Cases
+
+### Create assessment with invalid participant
+POST {{baseUrl}}/assessments
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "assessment": {
+    "judul": "Test Assessment",
+    "materi": "Test Material",
+    "proyeksi": "Test Position",
+    "metodePelaksanaan": "ONLINE",
+    "ruangan": "Room A",
+    "participantId": 999,
+    "isActive": true
+  },
+  "evaluators": [
+    {
+      "evaluatorId": 2
+    }
+  ]
+}
+
+### Create assessment with participant as evaluator
+POST {{baseUrl}}/assessments
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "assessment": {
+    "judul": "Test Assessment",
+    "materi": "Test Material",
+    "proyeksi": "Test Position",
+    "metodePelaksanaan": "ONLINE",
+    "ruangan": "Room A",
+    "participantId": 1,
+    "isActive": true
+  },
+  "evaluators": [
+    {
+      "evaluatorId": 1
+    }
+  ]
+}
+
+### Create assessment with duplicate evaluators
+POST {{baseUrl}}/assessments
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "assessment": {
+    "judul": "Test Assessment",
+    "materi": "Test Material",
+    "proyeksi": "Test Position",
+    "metodePelaksanaan": "ONLINE",
+    "ruangan": "Room A",
+    "participantId": 1,
+    "isActive": true
+  },
+  "evaluators": [
+    {
+      "evaluatorId": 2
+    },
+    {
+      "evaluatorId": 2
+    }
+  ]
+}
+
+### Invalid status transition
+PATCH {{baseUrl}}/assessments/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "status": "DONE"
+}
+
+### Add third evaluator (should fail)
+POST {{baseUrl}}/assessments/1/evaluators
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "evaluatorId": 5
+}

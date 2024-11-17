@@ -27,9 +27,16 @@ enum AssessmentStatus {
   RESCHEDULE
 }
 
-enum AssessmentRoleType {
-  PARTICIPANT
-  EVALUATOR
+enum EvaluationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum MetodePelaksanaan {
+  OFFLINE
+  ONLINE
+  HYBRID
 }
 
 model User {
@@ -47,99 +54,59 @@ model User {
   updatedAt    DateTime   @updatedAt
 
   // Relations
-  participations AssessmentParticipant[]
+  assessmentsAsParticipant Assessment[] // User as participant
+  evaluations              Evaluation[] // Evaluations made by the user
 
-  @@map("users")
-}
-
-model AssessmentRole {
-  id          Int                @id @default(autoincrement())
-  name        AssessmentRoleType @unique
-  description String
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-
-  // Relations
-  participants AssessmentParticipant[]
-
-  @@map("assessment_roles")
+  @@index([email])
+  @@index([nip])
 }
 
 model Assessment {
-  id                Int      @id @default(autoincrement())
+  id                Int               @id @default(autoincrement())
   judul             String
   materi            String
   proyeksi          String
-  metodePelaksanaan String
-  ruangan           String
+  metodePelaksanaan MetodePelaksanaan
+  ruangan           String?
   linkMeeting       String?
-  notaDinas         String
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  notaDinas         String?
+  schedule          DateTime // New field
+  status            AssessmentStatus  @default(CREATED)
+  isActive          Boolean           @default(true)
 
-  // Relations
-  participants AssessmentParticipant[]
-  evaluations  Evaluation[]
-
-  @@map("assessments")
-}
-
-model AssessmentParticipant {
-  id                Int               @id @default(autoincrement())
-  assessmentId      Int
-  userId            Int
-  assessmentRoleId  Int
-  participantStatus AssessmentStatus? @default(CREATED)
-  schedule          DateTime? // Optional schedule, only for PARTICIPANT role
-  expiredDate       DateTime? // Optional expiredDate, only for PARTICIPANT role
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-
-  // Relations
-  assessment          Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  assessmentRole      AssessmentRole  @relation(fields: [assessmentRoleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  submission          UserSubmission? @relation("ParticipantSubmission")
-  evaluationsGiven    Evaluation[]    @relation("evaluator")
-  evaluationsReceived Evaluation[]    @relation("participant")
-
-  @@unique([assessmentId, userId])
-  @@map("assessment_participants")
-}
-
-model UserSubmission {
-  id                     Int       @id @default(autoincrement())
-  participantId          Int       @unique
+  // Submission fields
   presentationFile       String?
-  attendanceConfirmation Boolean   @default(false)
+  attendanceConfirmation Boolean @default(false)
   questionnaireResponses Json?
-  submittedAt            DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
 
   // Relations
-  participant AssessmentParticipant @relation("ParticipantSubmission", fields: [participantId], references: [id])
+  participant   User         @relation(fields: [participantId], references: [id])
+  participantId Int
+  evaluations   Evaluation[] // Evaluations for this assessment
 
-  @@map("user_submissions")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([participantId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([schedule]) // Add index for schedule queries
 }
 
 model Evaluation {
-  id             Int       @id @default(autoincrement())
-  assessmentId   Int
+  id             Int              @id @default(autoincrement())
+  evaluator      User             @relation(fields: [evaluatorId], references: [id])
   evaluatorId    Int
-  participantId  Int
-  scores         Json?
-  recommendation String?   @db.Text
-  submittedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  assessment     Assessment       @relation(fields: [assessmentId], references: [id])
+  assessmentId   Int
+  scores         Json? // Optional JSON field for scores
+  recommendation String?          @db.Text
+  status         EvaluationStatus @default(PENDING)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  // Relations
-  assessment  Assessment            @relation(fields: [assessmentId], references: [id])
-  evaluator   AssessmentParticipant @relation("evaluator", fields: [evaluatorId], references: [id])
-  participant AssessmentParticipant @relation("participant", fields: [participantId], references: [id])
-
-  @@unique([assessmentId, evaluatorId, participantId])
-  @@map("evaluations")
+  @@unique([evaluatorId, assessmentId])
+  @@index([evaluatorId])
+  @@index([assessmentId])
+  @@index([status])
 }
