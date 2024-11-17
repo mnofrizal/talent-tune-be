@@ -1,0 +1,79 @@
+erDiagram
+    Assessment ||--o{ AssessmentParticipant : has
+    Assessment {
+        int id
+        string judul
+        string materi
+        string proyeksi
+        string metodePelaksanaan
+        string ruangan
+        string linkMeeting
+        string notaDinas
+        datetime schedule
+        datetime expiredDate
+        enum status
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AssessmentParticipant ||--|| User : "assigned to"
+    AssessmentParticipant ||--|| AssessmentRole : has
+    AssessmentParticipant {
+        int id
+        int assessmentId
+        int userId
+        int assessmentRoleId
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    User {
+        int id
+        string email
+        string phone
+        string password
+        string name
+        string nip
+        enum systemRole
+        string jabatan
+        string bidang
+        string refreshToken
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AssessmentRole {
+        int id
+        enum name
+        string description
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AssessmentParticipant ||--o| UserSubmission : "has submission"
+    UserSubmission {
+        int id
+        int assessmentId
+        int participantId
+        string pptxFile
+        boolean attendanceConfirmation
+        json questionnaireResponses
+        datetime submittedAt
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AssessmentParticipant ||--|{ Evaluation : "receives evaluation"
+    AssessmentParticipant ||--o{ Evaluation : "gives evaluation"
+    Evaluation {
+        int id
+        int assessmentId
+        int evaluatorId
+        int participantId
+        json scores
+        string recommendation
+        datetime submittedAt
+        datetime createdAt
+        datetime updatedAt
+    }

@@ -7,17 +7,17 @@ POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
-    "name": "New User",
     "email": "newuser@example.com",
-    "phone": "081234567892",
     "password": "password123",
+    "name": "New User",
     "nip": "456789123",
+    "phone": "081234567892",
     "systemRole": "USER",
     "jabatan": "Staff",
     "bidang": "Finance"
 }
 
-### Login
+### Login as Admin
 # @name login
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
@@ -27,53 +27,153 @@ Content-Type: application/json
     "password": "admin123"
 }
 
+### Login as User
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "password": "user123"
+}
+
 ### Get current user profile
 GET {{baseUrl}}/auth/me
 Authorization: Bearer {{authToken}}
 
-### Refresh token
-POST {{baseUrl}}/auth/refresh-token
+### User Endpoints
 
-### Logout
-POST {{baseUrl}}/auth/logout
-
-### Protected Routes Examples
-
-### Get all users (Protected)
+### Get all users
 GET {{baseUrl}}/users
 Authorization: Bearer {{authToken}}
 
-### Get user by ID (Protected)
+### Get user by ID
 GET {{baseUrl}}/users/1
 Authorization: Bearer {{authToken}}
 
-### Create new user (Protected, Admin only)
+### Create new user (Admin only)
 POST {{baseUrl}}/users
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "name": "Another User",
-    "email": "another@example.com",
-     "phone": "081234567892",
+    "email": "newstaff@example.com",
     "password": "password123",
+    "name": "New Staff Member",
     "nip": "789123456",
+    "phone": "081234567893",
     "systemRole": "USER",
-    "jabatan": "Staff",
+    "jabatan": "Junior Staff",
     "bidang": "HR"
 }
 
-### Update user (Protected)
-PUT {{baseUrl}}/users/1
+### Update user (Admin only)
+PUT {{baseUrl}}/users/2
 Authorization: Bearer {{authToken}}
 Content-Type: application/json
 
 {
-    "phone": "081234567899",
+    "name": "Updated User Name",
     "jabatan": "Senior Staff",
-    "bidang": "Finance"
+    "bidang": "Operations"
 }
 
-### Delete user (Protected, Admin only)
-DELETE {{baseUrl}}/users/1
+### Delete user (Admin only)
+DELETE {{baseUrl}}/users/3
+Authorization: Bearer {{authToken}}
+
+### Assessment Endpoints
+
+### Get all assessments
+GET {{baseUrl}}/assessments
+Authorization: Bearer {{authToken}}
+
+### Get assessment by ID
+GET {{baseUrl}}/assessments/4
+Authorization: Bearer {{authToken}}
+
+### Create new assessment with participants
+POST {{baseUrl}}/assessments
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "assessment": {
+        "judul": "Leadership Assessment 2024",
+        "materi": "Leadership Skills and Management",
+        "proyeksi": "Senior Manager Position",
+        "metodePelaksanaan": "Hybrid (Online and Offline)",
+        "ruangan": "Meeting Room A",
+        "linkMeeting": "https://meet.google.com/xyz",
+        "notaDinas": "ND-001/HR/2024",
+        "isActive": true
+    },
+    "participants": [
+        {
+            "userId": 2,
+            "assessmentRoleId": 1,
+            "schedule": "2024-03-01T09:00:00Z"
+        },
+        {
+            "userId": 3,
+            "assessmentRoleId": 2
+        }
+    ]
+}
+
+### Update assessment
+PUT {{baseUrl}}/assessments/1
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "judul": "Updated Leadership Assessment 2024",
+    "materi": "Advanced Leadership Skills",
+    "metodePelaksanaan": "Online Only",
+    "linkMeeting": "https://meet.google.com/abc"
+}
+
+### Update participant status
+PATCH {{baseUrl}}/assessments/1/participants/1/status
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "status": "WAITING_CONFIRMATION"
+}
+
+### Update participant schedule
+PATCH {{baseUrl}}/assessments/1/participants/1/schedule
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "schedule": "2024-03-01T09:00:00Z"
+}
+
+### Add participant to assessment
+POST {{baseUrl}}/assessments/1/participants
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "userId": 4,
+    "assessmentRoleId": 1,
+    "schedule": "2024-03-15T09:00:00Z"
+}
+
+### Remove participant from assessment
+DELETE {{baseUrl}}/assessments/1/participants/1
+Authorization: Bearer {{authToken}}
+
+### Delete assessment
+DELETE {{baseUrl}}/assessments/6
+Authorization: Bearer {{authToken}}
+
+### Refresh Token
+POST {{baseUrl}}/auth/refresh-token
+Content-Type: application/json
+
+### Logout
+POST {{baseUrl}}/auth/logout
 Authorization: Bearer {{authToken}}

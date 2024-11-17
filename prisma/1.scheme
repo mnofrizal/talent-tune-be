@@ -23,7 +23,7 @@ enum AssessmentStatus {
   EVALUATING
   NEED_REVIEW
   DONE
-  CANCELED
+    CANCELED // New status for canceled assessments
   RESCHEDULE
 }
 
@@ -53,11 +53,11 @@ model User {
 }
 
 model AssessmentRole {
-  id          Int                @id @default(autoincrement())
-  name        AssessmentRoleType @unique
+  id          Int               @id @default(autoincrement())
+  name        AssessmentRoleType
   description String
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   // Relations
   participants AssessmentParticipant[]
@@ -66,7 +66,7 @@ model AssessmentRole {
 }
 
 model Assessment {
-  id                Int      @id @default(autoincrement())
+  id                 Int              @id @default(autoincrement())
   judul             String
   materi            String
   proyeksi          String
@@ -74,9 +74,12 @@ model Assessment {
   ruangan           String
   linkMeeting       String?
   notaDinas         String
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  schedule          DateTime
+  expiredDate       DateTime
+  status            AssessmentStatus @default(CREATED)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   // Relations
   participants AssessmentParticipant[]
@@ -86,23 +89,20 @@ model Assessment {
 }
 
 model AssessmentParticipant {
-  id                Int               @id @default(autoincrement())
-  assessmentId      Int
-  userId            Int
-  assessmentRoleId  Int
-  participantStatus AssessmentStatus? @default(CREATED)
-  schedule          DateTime? // Optional schedule, only for PARTICIPANT role
-  expiredDate       DateTime? // Optional expiredDate, only for PARTICIPANT role
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id               Int      @id @default(autoincrement())
+  assessmentId     Int
+  userId           Int
+  assessmentRoleId Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   // Relations
-  assessment          Assessment      @relation(fields: [assessmentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  assessmentRole      AssessmentRole  @relation(fields: [assessmentRoleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  submission          UserSubmission? @relation("ParticipantSubmission")
-  evaluationsGiven    Evaluation[]    @relation("evaluator")
-  evaluationsReceived Evaluation[]    @relation("participant")
+  assessment           Assessment        @relation(fields: [assessmentId], references: [id])
+  user                User              @relation(fields: [userId], references: [id])
+  assessmentRole      AssessmentRole    @relation(fields: [assessmentRoleId], references: [id])
+  submission          UserSubmission?   @relation("ParticipantSubmission")
+  evaluationsGiven    Evaluation[]      @relation("evaluator")
+  evaluationsReceived Evaluation[]      @relation("participant")
 
   @@unique([assessmentId, userId])
   @@map("assessment_participants")
@@ -110,13 +110,14 @@ model AssessmentParticipant {
 
 model UserSubmission {
   id                     Int       @id @default(autoincrement())
+  assessmentId           Int
   participantId          Int       @unique
-  presentationFile       String?
+  presentationFile               String?
   attendanceConfirmation Boolean   @default(false)
-  questionnaireResponses Json?
-  submittedAt            DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  questionnaireResponses Json?     // Store 5 question responses
+  submittedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   // Relations
   participant AssessmentParticipant @relation("ParticipantSubmission", fields: [participantId], references: [id])
@@ -127,16 +128,16 @@ model UserSubmission {
 model Evaluation {
   id             Int       @id @default(autoincrement())
   assessmentId   Int
-  evaluatorId    Int
-  participantId  Int
-  scores         Json?
+  evaluatorId    Int      // Reference to AssessmentParticipant with EVALUATOR role
+  participantId  Int      // Reference to AssessmentParticipant with PARTICIPANT role
+  scores         Json?    // Store 4 aspect scores
   recommendation String?   @db.Text
   submittedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
-  assessment  Assessment            @relation(fields: [assessmentId], references: [id])
+  assessment  Assessment           @relation(fields: [assessmentId], references: [id])
   evaluator   AssessmentParticipant @relation("evaluator", fields: [evaluatorId], references: [id])
   participant AssessmentParticipant @relation("participant", fields: [participantId], references: [id])
 

@@ -79,6 +79,7 @@ async function main() {
     },
   ];
 
+  // Create users
   for (const user of users) {
     const hashedPassword = await bcrypt.hash(user.password, 10);
     await prisma.user.upsert({
@@ -88,6 +89,26 @@ async function main() {
         ...user,
         password: hashedPassword,
       },
+    });
+  }
+
+  // Create assessment roles
+  const assessmentRoles = [
+    {
+      name: "PARTICIPANT",
+      description: "Assessment participant role",
+    },
+    {
+      name: "EVALUATOR",
+      description: "Assessment evaluator role",
+    },
+  ];
+
+  for (const role of assessmentRoles) {
+    await prisma.assessmentRole.upsert({
+      where: { name: role.name },
+      update: {},
+      create: role,
     });
   }
 
