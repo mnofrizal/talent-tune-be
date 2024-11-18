@@ -56,16 +56,16 @@ export const assessmentController = {
   async getParticipantAssessments(req, res) {
     try {
       const { userId } = req.params;
-      const assessments = await assessmentService.getParticipantAssessments(
-        Number(userId)
-      );
+      const { assessments, metadata } =
+        await assessmentService.getParticipantAssessments(Number(userId));
 
       return res
         .status(StatusCodes.OK)
         .json(
           successResponse(
             "Participant assessments retrieved successfully",
-            assessments
+            assessments,
+            metadata
           )
         );
     } catch (error) {
@@ -79,16 +79,16 @@ export const assessmentController = {
   async getEvaluatorAssessments(req, res) {
     try {
       const { userId } = req.params;
-      const assessments = await assessmentService.getEvaluatorAssessments(
-        Number(userId)
-      );
+      const { assessments, metadata } =
+        await assessmentService.getEvaluatorAssessments(Number(userId));
 
       return res
         .status(StatusCodes.OK)
         .json(
           successResponse(
             "Evaluator assessments retrieved successfully",
-            assessments
+            assessments,
+            metadata
           )
         );
     } catch (error) {
@@ -176,6 +176,65 @@ export const assessmentController = {
       return res
         .status(StatusCodes.OK)
         .json(successResponse("Assessment deleted successfully"));
+    } catch (error) {
+      return res
+        .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+        .json(errorResponse(error.message));
+    }
+  },
+
+  // Send invitation for assessment
+  async sendInvitation(req, res) {
+    try {
+      const { id } = req.params;
+      await assessmentService.sendInvitation(Number(id));
+
+      return res
+        .status(StatusCodes.OK)
+        .json(successResponse("Invitation sent successfully"));
+    } catch (error) {
+      return res
+        .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+        .json(errorResponse(error.message));
+    }
+  },
+
+  // Update assessment submission
+  async updateAssessmentSubmission(req, res) {
+    try {
+      const { id } = req.params;
+      const {
+        presentationFile,
+        attendanceConfirmation,
+        questionnaireResponses,
+      } = req.body;
+
+      await assessmentService.updateAssessmentSubmission(
+        Number(id),
+        presentationFile,
+        attendanceConfirmation,
+        questionnaireResponses
+      );
+
+      return res
+        .status(StatusCodes.OK)
+        .json(successResponse("Assessment submission updated successfully"));
+    } catch (error) {
+      return res
+        .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+        .json(errorResponse(error.message));
+    }
+  },
+
+  // Start assessment
+  async startAssessment(req, res) {
+    try {
+      const { id } = req.params;
+      await assessmentService.startAssessment(Number(id));
+
+      return res
+        .status(StatusCodes.OK)
+        .json(successResponse("Assessment started successfully"));
     } catch (error) {
       return res
         .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)

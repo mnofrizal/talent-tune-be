@@ -93,15 +93,15 @@ GET {{baseUrl}}/assessments?page=1&limit=10&status=CREATED&metodePelaksanaan=ONL
 Authorization: Bearer {{authToken}}
 
 ### Get assessment by ID
-GET {{baseUrl}}/assessments/2
+GET {{baseUrl}}/assessments/9
 Authorization: Bearer {{authToken}}
 
 ### Get participant's assessments
-GET {{baseUrl}}/assessments/participant/1?page=1&limit=10
+GET {{baseUrl}}/assessments/participant/2?page=1&limit=10
 Authorization: Bearer {{authToken}}
 
 ### Get evaluator's assessments
-GET {{baseUrl}}/assessments/evaluator/1?page=1&limit=10
+GET {{baseUrl}}/assessments/evaluator/3
 Authorization: Bearer {{authToken}}
 
 ### Create new assessment with evaluators (Admin only)
@@ -267,7 +267,7 @@ DELETE {{baseUrl}}/assessments/1/evaluators/4
 Authorization: Bearer {{authToken}}
 
 ### Delete assessment (Admin only)
-DELETE {{baseUrl}}/assessments/7
+DELETE {{baseUrl}}/assessments/1
 Authorization: Bearer {{authToken}}
 
 ### Error Test Cases

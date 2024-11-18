@@ -41,6 +41,12 @@ router.delete(
   assessmentController.deleteAssessment
 );
 
+router.post("/:id/send-invitation", assessmentController.sendInvitation);
+
+router.put("/:id/requirement", assessmentController.updateAssessmentSubmission);
+
+router.put("/:id/start", assessmentController.startAssessment);
+
 // // Submission Routes - Available to participants
 // router.post("/:id/submission", assessmentController.submitAssessment);
 

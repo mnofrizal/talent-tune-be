@@ -15,7 +15,6 @@ enum SystemRole {
 }
 
 enum AssessmentStatus {
-  CREATED
   SCHEDULED
   WAITING_CONFIRMATION
   TALENT_REQUIREMENTS
@@ -71,7 +70,7 @@ model Assessment {
   linkMeeting       String?
   notaDinas         String?
   schedule          DateTime // New field
-  status            AssessmentStatus  @default(CREATED)
+  status            AssessmentStatus  @default(SCHEDULED)
   isActive          Boolean           @default(true)
 
   // Submission fields

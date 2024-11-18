@@ -164,6 +164,16 @@ export const assessmentService = {
         prisma.assessment.findMany({
           where,
           include: {
+            participant: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                nip: true,
+                jabatan: true,
+                bidang: true,
+              },
+            },
             evaluations: {
               include: {
                 evaluator: {
@@ -188,7 +198,7 @@ export const assessmentService = {
       const totalPages = Math.ceil(total / limit);
 
       return {
-        data: assessments,
+        assessments,
         metadata: {
           total,
           page,
@@ -261,7 +271,7 @@ export const assessmentService = {
       const totalPages = Math.ceil(total / limit);
 
       return {
-        data: assessments,
+        assessments,
         metadata: {
           total,
           page,
@@ -627,5 +637,126 @@ export const assessmentService = {
     return await prisma.assessment.delete({
       where: { id },
     });
+  },
+
+  async sendInvitation(id) {
+    try {
+      const assessment = await prisma.assessment.findUnique({
+        where: { id },
+      });
+
+      if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      // Check if the assessment is in a valid state to send invitation
+      if (assessment.status !== "SCHEDULED") {
+        throw new CustomError(
+          `Cannot send invitation for assessment in ${assessment.status} status`,
+          StatusCodes.BAD_REQUEST
+        );
+      }
+
+      // Update assessment status to WAITING_CONFIRMATION
+      const updatedAssessment = await prisma.assessment.update({
+        where: { id },
+        data: { status: "WAITING_CONFIRMATION" },
+      });
+
+      console.log("Invitation sent");
+
+      return updatedAssessment;
+    } catch (error) {
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error sending invitation",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
+  },
+
+  async updateAssessmentSubmission(
+    id,
+    presentationFile,
+    attendanceConfirmation,
+    questionnaireResponses
+  ) {
+    try {
+      const assessment = await prisma.assessment.findUnique({
+        where: { id },
+      });
+
+      if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      console.log({ attendanceConfirmation });
+
+      // Update assessment status based on attendanceConfirmation and additional data
+      let statusUpdate;
+      if (
+        attendanceConfirmation &&
+        presentationFile &&
+        questionnaireResponses
+      ) {
+        statusUpdate = "READY_FOR_ASSESSMENT";
+      } else if (attendanceConfirmation) {
+        statusUpdate = "TALENT_REQUIREMENTS";
+      } else {
+        statusUpdate = "CANCELED";
+      }
+
+      // Update assessment status and additional fields
+      const updatedAssessment = await prisma.assessment.update({
+        where: { id },
+        data: {
+          attendanceConfirmation,
+          status: statusUpdate,
+          presentationFile: presentationFile
+            ? presentationFile
+            : assessment.presentationFile,
+          questionnaireResponses: questionnaireResponses
+            ? questionnaireResponses
+            : assessment.questionnaireResponses,
+        },
+      });
+
+      console.log("Assessment submission updated");
+
+      return updatedAssessment;
+    } catch (error) {
+      console.log(error);
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error updating assessment submission",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
+  },
+
+  // Update assessment status to 'EVALUATING'
+  async startAssessment(id) {
+    try {
+      const updatedAssessment = await prisma.assessment.update({
+        where: { id },
+        data: {
+          status: "EVALUATING",
+        },
+      });
+
+      console.log("Assessment status updated to 'EVALUATING'");
+
+      return updatedAssessment;
+    } catch (error) {
+      console.log(error);
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error updating assessment status to 'EVALUATING'",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
   },
 };
