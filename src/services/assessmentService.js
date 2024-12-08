@@ -643,7 +643,21 @@ export const assessmentService = {
     try {
       const assessment = await prisma.assessment.findUnique({
         where: { id },
+        include: {
+          participant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              nip: true,
+              jabatan: true,
+              bidang: true,
+            },
+          },
+        },
       });
+
+      console.log({ assessment });
 
       if (!assessment) {
         throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
@@ -657,13 +671,42 @@ export const assessmentService = {
         );
       }
 
+      // Prepare payload for WhatsApp invitation
+      const payload = {
+        phone: "6287733760363", // Replace with participant's phone number dynamically if available
+        template: "fitAndProper",
+        templateData: {
+          name: assessment.participant.name,
+          grade: assessment.participant.proyeksi || "Unknown Grade",
+          link: `https://renval.msdm.app/`,
+        },
+      };
+
+      // Send the invitation via fetch
+      const response = await fetch("http://localhost:2200/api/messages/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new CustomError(
+          `Failed to send WhatsApp invitation: ${response.statusText}`,
+          StatusCodes.BAD_REQUEST,
+          errorText
+        );
+      }
+
       // Update assessment status to WAITING_CONFIRMATION
       const updatedAssessment = await prisma.assessment.update({
         where: { id },
         data: { status: "WAITING_CONFIRMATION" },
       });
 
-      console.log("Invitation sent");
+      console.log("Invitation sent successfully");
 
       return updatedAssessment;
     } catch (error) {
