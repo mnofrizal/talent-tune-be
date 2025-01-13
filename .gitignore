@@ -1,1 +1,8 @@
 node_modules
+
+temp
+
+src/uploads/assesment/nota-dinas/*
+src/uploads/assesment/penilaian/*
+src/uploads/assesment/ppt/*
+src/uploads/assesment/questionnaire/*

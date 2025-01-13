@@ -64,7 +64,7 @@ const createAssessmentSchema = z.object({
     metodePelaksanaan: metodePelaksanaanEnum,
     ruangan: z.string().optional().nullable(),
     linkMeeting: z.string().url().optional().nullable(),
-    notaDinas: z.string().optional().nullable(),
+    notaDinas: z.any().optional().nullable(),
     participants: z
       .array(participantScheduleSchema)
       .min(1, "At least one participant with schedule is required"),

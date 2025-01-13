@@ -68,15 +68,16 @@ model Assessment {
   metodePelaksanaan MetodePelaksanaan
   ruangan           String?
   linkMeeting       String?
-  notaDinas         String?
+  notaDinas         NotaDinas? // Removed relation for notaDinas
   schedule          DateTime // New field
   status            AssessmentStatus  @default(SCHEDULED)
   isActive          Boolean           @default(true)
 
   // Submission fields
-  presentationFile       String?
   attendanceConfirmation Boolean @default(false)
   questionnaireResponses Json?
+  presentationFile       File?   @relation("PresentationFile")
+  questionnaireFile      File?   @relation("QuestionnaireFile")
 
   // Relations
   participant   User         @relation(fields: [participantId], references: [id])
@@ -101,6 +102,7 @@ model Evaluation {
   scores         Json? // Optional JSON field for scores
   recommendation String?          @db.Text
   status         EvaluationStatus @default(PENDING)
+  evaluationFile EvaluationFile? // Relation to evaluation file
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -108,4 +110,34 @@ model Evaluation {
   @@index([evaluatorId])
   @@index([assessmentId])
   @@index([status])
+}
+
+model EvaluationFile {
+  id           Int        @id @default(autoincrement())
+  fileName     String
+  filePath     String
+  uploadedAt   DateTime   @default(now())
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id])
+  evaluationId Int        @unique
+}
+
+model NotaDinas {
+  id           Int        @id @default(autoincrement())
+  fileName     String
+  filePath     String
+  uploadedAt   DateTime   @default(now())
+  assessment   Assessment @relation(fields: [assessmentId], references: [id]) // Added relation for assessment
+  assessmentId Int        @unique // Make this unique for one-to-one relationship
+}
+
+model File {
+  id                        Int         @id @default(autoincrement())
+  fileName                  String
+  filePath                  String
+  fileType                  String?
+  uploadedAt                DateTime    @default(now())
+  assessmentPresentation    Assessment? @relation("PresentationFile", fields: [presentationAssessmentId], references: [id])
+  presentationAssessmentId  Int?        @unique
+  assessmentQuestionnaire   Assessment? @relation("QuestionnaireFile", fields: [questionnaireAssessmentId], references: [id])
+  questionnaireAssessmentId Int?        @unique
 }

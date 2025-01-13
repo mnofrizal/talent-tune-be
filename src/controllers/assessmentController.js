@@ -101,8 +101,13 @@ export const assessmentController = {
   // Create new assessment
   async createAssessment(req, res) {
     try {
-      const validatedData = validateCreateAssessment(req.body);
-      const result = await assessmentService.createAssessment(validatedData);
+      const validatedData = validateCreateAssessment(JSON.parse(req.body.data));
+      console.log({ validatedData });
+      const notaDinasFile = req.file;
+      const result = await assessmentService.createAssessment(
+        validatedData,
+        notaDinasFile
+      );
 
       return res
         .status(StatusCodes.CREATED)
@@ -167,6 +172,29 @@ export const assessmentController = {
     }
   },
 
+  // Reset assessment status
+  async resetAssessmentStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const updatedAssessment = await assessmentService.resetAssessmentStatus(
+        Number(id)
+      );
+
+      return res
+        .status(StatusCodes.OK)
+        .json(
+          successResponse(
+            "Assessment status reset successfully",
+            updatedAssessment
+          )
+        );
+    } catch (error) {
+      return res
+        .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+        .json(errorResponse(error.message));
+    }
+  },
+
   // Delete assessment
   async deleteAssessment(req, res) {
     try {
@@ -202,18 +230,36 @@ export const assessmentController = {
   // Update assessment submission
   async updateAssessmentSubmission(req, res) {
     try {
+      console.log(req.body);
       const { id } = req.params;
-      const {
-        presentationFile,
-        attendanceConfirmation,
-        questionnaireResponses,
-      } = req.body;
+      const { attendanceConfirmation, questionnaireResponses } = req.body;
+
+      // Convert attendanceConfirmation to boolean if it's a string
+      const attendanceConfirmationBool =
+        typeof attendanceConfirmation === "string"
+          ? attendanceConfirmation === "true"
+          : Boolean(attendanceConfirmation);
+
+      // Parse questionnaire responses from JSON string to object
+      const parsedQuestionnaireResponses =
+        typeof questionnaireResponses === "string"
+          ? JSON.parse(questionnaireResponses)
+          : questionnaireResponses;
+
+      // Create presentation file data if file was uploaded
+      let presentationFileData = null;
+      if (req.file) {
+        presentationFileData = {
+          fileName: req.file.filename,
+          filePath: req.file.filename,
+        };
+      }
 
       await assessmentService.updateAssessmentSubmission(
         Number(id),
-        presentationFile,
-        attendanceConfirmation,
-        questionnaireResponses
+        presentationFileData,
+        attendanceConfirmationBool,
+        parsedQuestionnaireResponses
       );
 
       return res

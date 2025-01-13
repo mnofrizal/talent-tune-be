@@ -7,7 +7,7 @@ POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 {
-    "email": "newuser@example.com",
+    "email": "newuser@msdm.app",
     "password": "password123",
     "name": "New User",
     "nip": "456789123",
@@ -23,7 +23,7 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-    "email": "admin@example.com",
+    "email": "admin@msdm.app",
     "password": "admin123"
 }
 
@@ -33,8 +33,8 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-    "email": "user@example.com",
-    "password": "user123"
+    "email": "admin@msdm.app",
+    "password": "admin123"
 }
 
 ### Get current user profile
@@ -93,7 +93,7 @@ GET {{baseUrl}}/assessments?page=1&limit=10&status=CREATED&metodePelaksanaan=ONL
 Authorization: Bearer {{authToken}}
 
 ### Get assessment by ID
-GET {{baseUrl}}/assessments/9
+GET {{baseUrl}}/assessments/15
 Authorization: Bearer {{authToken}}
 
 ### Get participant's assessments
@@ -267,7 +267,7 @@ DELETE {{baseUrl}}/assessments/1/evaluators/4
 Authorization: Bearer {{authToken}}
 
 ### Delete assessment (Admin only)
-DELETE {{baseUrl}}/assessments/1
+DELETE {{baseUrl}}/assessments/3
 Authorization: Bearer {{authToken}}
 
 ### Error Test Cases

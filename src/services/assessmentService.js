@@ -1,6 +1,13 @@
 import { prisma } from "../config/prisma.js";
 import { CustomError } from "../utils/customError.js";
 import { StatusCodes } from "http-status-codes";
+import fs from "fs";
+import path from "path";
+import { promisify } from "util";
+import { uploadsDir } from "../utils/uploadConfig.js";
+import { generateQuestionnairePDF } from "../utils/pdfGenerator.js";
+
+const unlinkAsync = promisify(fs.unlink);
 
 export const assessmentService = {
   async getAssessments({
@@ -52,6 +59,9 @@ export const assessmentService = {
         prisma.assessment.findMany({
           where,
           include: {
+            notaDinas: true,
+            presentationFile: true,
+            questionnaireFile: true,
             participant: {
               select: {
                 id: true,
@@ -64,6 +74,7 @@ export const assessmentService = {
             },
             evaluations: {
               include: {
+                evaluationFile: true,
                 evaluator: {
                   select: {
                     id: true,
@@ -110,6 +121,8 @@ export const assessmentService = {
       const assessment = await prisma.assessment.findUnique({
         where: { id },
         include: {
+          presentationFile: true,
+          questionnaireFile: true,
           participant: {
             select: {
               id: true,
@@ -290,10 +303,19 @@ export const assessmentService = {
   },
 
   // Create new assessment
-  async createAssessment(data) {
+  async createAssessment(data, notaDinasFile) {
     try {
       const { assessment, evaluators } = data;
       const { participants, ...assessmentData } = assessment;
+
+      // Handle notaDinas file if provided
+      let notaDinasData = null;
+      if (notaDinasFile) {
+        notaDinasData = {
+          fileName: notaDinasFile.filename,
+          filePath: notaDinasFile.filename,
+        };
+      }
 
       // Get unique participant IDs
       const participantIds = participants.map((p) => p.participantId);
@@ -354,7 +376,7 @@ export const assessmentService = {
         const assessments = [];
 
         for (const participant of participants) {
-          // Create the assessment with individual schedule
+          // Create the assessment with individual schedule and notaDinas if provided
           const newAssessment = await tx.assessment.create({
             data: {
               ...assessmentData,
@@ -362,6 +384,11 @@ export const assessmentService = {
               participant: {
                 connect: { id: participant.participantId },
               },
+              ...(notaDinasData && {
+                notaDinas: {
+                  create: notaDinasData,
+                },
+              }),
             },
           });
 
@@ -519,6 +546,141 @@ export const assessmentService = {
       );
     }
   },
+  async resetAssessmentStatus(id) {
+    try {
+      const assessment = await prisma.assessment.findUnique({
+        where: { id },
+      });
+
+      if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      // Get current assessment with files
+      const currentAssessment = await prisma.assessment.findUnique({
+        where: { id },
+        include: {
+          presentationFile: true,
+          questionnaireFile: true,
+        },
+      });
+
+      // Delete physical files if they exist
+      const fileDeletionPromises = [];
+
+      // Helper function to attempt file deletion with multiple possible paths
+      const attemptFileDeletion = (filePath, type, uploadDir) => {
+        console.log(`Attempting to delete ${type} file: ${filePath}`);
+
+        const possiblePaths = [
+          // Try stored path directly
+          filePath,
+          // Try with project root
+          path.join(process.cwd(), filePath),
+          // Try in specific upload directory
+          path.join(uploadDir, path.basename(filePath)),
+        ];
+
+        console.log(`Checking possible paths for ${type}:`, possiblePaths);
+
+        // Try to delete from each possible location
+        for (const tryPath of possiblePaths) {
+          if (fs.existsSync(tryPath)) {
+            console.log(`${type} file found at: ${tryPath}`);
+            fileDeletionPromises.push(
+              unlinkAsync(tryPath).catch((error) =>
+                console.error(
+                  `Error deleting ${type} file at ${tryPath}:`,
+                  error
+                )
+              )
+            );
+            // Break after finding and attempting to delete the first occurrence
+            break;
+          }
+        }
+      };
+
+      // Delete presentation file if exists
+      if (currentAssessment.presentationFile?.filePath) {
+        attemptFileDeletion(
+          currentAssessment.presentationFile.filePath,
+          "presentation",
+          uploadsDir.presentation
+        );
+      }
+
+      // Delete questionnaire file if exists
+      if (currentAssessment.questionnaireFile?.filePath) {
+        attemptFileDeletion(
+          currentAssessment.questionnaireFile.filePath,
+          "questionnaire",
+          uploadsDir.questionnaire
+        );
+      }
+
+      // Wait for all file deletions to complete
+      await Promise.all(fileDeletionPromises);
+
+      // Update assessment status and disconnect files
+      const updatedAssessment = await prisma.$transaction(async (tx) => {
+        // Delete file records first
+        if (currentAssessment.presentationFile) {
+          await tx.file.delete({
+            where: { id: currentAssessment.presentationFile.id },
+          });
+        }
+        if (currentAssessment.questionnaireFile) {
+          await tx.file.delete({
+            where: { id: currentAssessment.questionnaireFile.id },
+          });
+        }
+
+        // Then update assessment
+        return await tx.assessment.update({
+          where: { id },
+          data: {
+            status: "SCHEDULED",
+            attendanceConfirmation: false,
+            questionnaireResponses: null,
+          },
+          include: {
+            participant: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                nip: true,
+                jabatan: true,
+                bidang: true,
+              },
+            },
+            evaluations: {
+              include: {
+                evaluator: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    nip: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      return updatedAssessment;
+    } catch (error) {
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error resetting assessment status",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
+    }
+  },
 
   // Update assessment status
   async updateAssessmentStatus(id, status) {
@@ -620,23 +782,206 @@ export const assessmentService = {
 
   // Delete assessment
   async deleteAssessment(id) {
-    const assessment = await prisma.assessment.findUnique({
-      where: { id },
-    });
+    try {
+      console.log(`Starting deletion process for assessment ID: ${id}`);
 
-    if (!assessment) {
-      throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      const assessment = await prisma.assessment.findUnique({
+        where: { id },
+        include: {
+          evaluations: {
+            include: {
+              evaluationFile: true,
+            },
+          },
+          presentationFile: true,
+          questionnaireFile: true,
+          notaDinas: true,
+        },
+      });
+
+      console.log("Found assessment:", assessment ? "Yes" : "No");
+
+      if (!assessment) {
+        throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
+      }
+
+      // Use transaction to ensure all deletions succeed or fail together
+      const result = await prisma.$transaction(async (tx) => {
+        console.log("Starting database transaction");
+
+        // Delete evaluation files first
+        for (const evaluation of assessment.evaluations) {
+          if (evaluation.evaluationFile) {
+            console.log(
+              `Deleting evaluation file ID: ${evaluation.evaluationFile.id}`
+            );
+            await tx.evaluationFile.delete({
+              where: { id: evaluation.evaluationFile.id },
+            });
+          }
+        }
+
+        // Delete evaluations
+        console.log(`Deleting evaluations for assessment ID: ${id}`);
+        await tx.evaluation.deleteMany({
+          where: { assessmentId: id },
+        });
+
+        // Delete associated files
+        if (assessment.presentationFile) {
+          console.log(
+            `Deleting presentation file ID: ${assessment.presentationFile.id}`
+          );
+          await tx.file.delete({
+            where: { id: assessment.presentationFile.id },
+          });
+        }
+
+        if (assessment.questionnaireFile) {
+          console.log(
+            `Deleting questionnaire file ID: ${assessment.questionnaireFile.id}`
+          );
+          await tx.file.delete({
+            where: { id: assessment.questionnaireFile.id },
+          });
+        }
+
+        // Delete nota dinas if exists
+        if (assessment.notaDinas) {
+          console.log(`Deleting nota dinas ID: ${assessment.notaDinas.id}`);
+          await tx.notaDinas.delete({
+            where: { id: assessment.notaDinas.id },
+          });
+        }
+
+        // Finally delete the assessment
+        console.log(`Deleting assessment ID: ${id}`);
+        return await tx.assessment.delete({
+          where: { id },
+        });
+      });
+
+      console.log("Database transaction completed successfully");
+
+      // Delete physical files after successful database transaction
+      const fileDeletionPromises = [];
+
+      // Delete evaluation files
+      assessment.evaluations.forEach((evaluation) => {
+        if (evaluation.evaluationFile && evaluation.evaluationFile.filePath) {
+          const filePath = evaluation.evaluationFile.filePath;
+          console.log(`Attempting to delete evaluation file: ${filePath}`);
+
+          // Try all possible paths where the file might exist
+          const possiblePaths = [
+            // Try stored path directly
+            filePath,
+            // Try with project root
+            path.join(process.cwd(), filePath),
+            // Try in penilaian directory
+            path.join(
+              process.cwd(),
+              "src",
+              "uploads",
+              "assesment",
+              "penilaian",
+              path.basename(filePath)
+            ),
+          ];
+
+          console.log("Checking possible file paths:", possiblePaths);
+
+          // Try to delete from each possible location
+          for (const tryPath of possiblePaths) {
+            if (fs.existsSync(tryPath)) {
+              console.log(`File found at: ${tryPath}`);
+              fileDeletionPromises.push(
+                unlinkAsync(tryPath).catch((error) =>
+                  console.error(`Error deleting file at ${tryPath}:`, error)
+                )
+              );
+              // Break after finding and attempting to delete the first occurrence
+              break;
+            }
+          }
+        }
+      });
+
+      // Helper function to attempt file deletion with multiple possible paths
+      const attemptFileDeletion = (filePath, type, uploadDir) => {
+        console.log(`Attempting to delete ${type} file: ${filePath}`);
+
+        const possiblePaths = [
+          // Try stored path directly
+          filePath,
+          // Try with project root
+          path.join(process.cwd(), filePath),
+          // Try in specific upload directory
+          path.join(uploadDir, path.basename(filePath)),
+        ];
+
+        console.log(`Checking possible paths for ${type}:`, possiblePaths);
+
+        // Try to delete from each possible location
+        for (const tryPath of possiblePaths) {
+          if (fs.existsSync(tryPath)) {
+            console.log(`${type} file found at: ${tryPath}`);
+            fileDeletionPromises.push(
+              unlinkAsync(tryPath).catch((error) =>
+                console.error(
+                  `Error deleting ${type} file at ${tryPath}:`,
+                  error
+                )
+              )
+            );
+            // Break after finding and attempting to delete the first occurrence
+            break;
+          }
+        }
+      };
+
+      // Delete presentation file
+      if (assessment.presentationFile?.filePath) {
+        attemptFileDeletion(
+          assessment.presentationFile.filePath,
+          "presentation",
+          uploadsDir.presentation
+        );
+      }
+
+      // Delete questionnaire file
+      if (assessment.questionnaireFile?.filePath) {
+        attemptFileDeletion(
+          assessment.questionnaireFile.filePath,
+          "questionnaire",
+          uploadsDir.questionnaire
+        );
+      }
+
+      // Delete nota dinas file
+      if (assessment.notaDinas?.filePath) {
+        attemptFileDeletion(
+          assessment.notaDinas.filePath,
+          "nota dinas",
+          uploadsDir.notaDinas
+        );
+      }
+
+      // Wait for all file deletions to complete
+      console.log("Waiting for physical file deletions to complete");
+      await Promise.all(fileDeletionPromises);
+      console.log("All physical files deleted successfully");
+
+      return result;
+    } catch (error) {
+      console.error("Error in deleteAssessment:", error);
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        "Error deleting assessment",
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        error
+      );
     }
-
-    // Delete associated evaluations first
-    await prisma.evaluation.deleteMany({
-      where: { assessmentId: id },
-    });
-
-    // Then delete the assessment
-    return await prisma.assessment.delete({
-      where: { id },
-    });
   },
 
   async sendInvitation(id) {
@@ -721,48 +1066,158 @@ export const assessmentService = {
 
   async updateAssessmentSubmission(
     id,
-    presentationFile,
+    presentationFileData,
     attendanceConfirmation,
     questionnaireResponses
   ) {
+    console.log({ questionnaireResponses });
     try {
       const assessment = await prisma.assessment.findUnique({
         where: { id },
+        include: {
+          presentationFile: true,
+          questionnaireFile: true,
+          participant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              nip: true,
+              jabatan: true,
+              bidang: true,
+            },
+          },
+        },
       });
 
       if (!assessment) {
         throw new CustomError("Assessment not found", StatusCodes.NOT_FOUND);
       }
 
-      console.log({ attendanceConfirmation });
+      // Delete existing presentation file if it exists and new file is provided
+      if (assessment.presentationFile && presentationFileData) {
+        await prisma.file.delete({
+          where: { id: assessment.presentationFile.id },
+        });
+
+        // Delete physical file with multiple path attempts
+        const possiblePaths = [
+          // Try stored path directly
+          assessment.presentationFile.filePath,
+          // Try with project root
+          path.join(process.cwd(), assessment.presentationFile.filePath),
+          // Try in presentation directory
+          path.join(
+            uploadsDir.presentation,
+            path.basename(assessment.presentationFile.filePath)
+          ),
+        ];
+
+        for (const tryPath of possiblePaths) {
+          if (fs.existsSync(tryPath)) {
+            console.log(`Found presentation file at: ${tryPath}`);
+            await unlinkAsync(tryPath);
+            break;
+          }
+        }
+      }
+
+      // Delete existing questionnaire file if it exists and new responses are provided
+      if (assessment.questionnaireFile && questionnaireResponses) {
+        await prisma.file.delete({
+          where: { id: assessment.questionnaireFile.id },
+        });
+
+        // Delete physical file with multiple path attempts
+        const possiblePaths = [
+          // Try stored path directly
+          assessment.questionnaireFile.filePath,
+          // Try with project root
+          path.join(process.cwd(), assessment.questionnaireFile.filePath),
+          // Try in questionnaire directory
+          path.join(
+            uploadsDir.questionnaire,
+            path.basename(assessment.questionnaireFile.filePath)
+          ),
+        ];
+
+        for (const tryPath of possiblePaths) {
+          if (fs.existsSync(tryPath)) {
+            console.log(`Found questionnaire file at: ${tryPath}`);
+            await unlinkAsync(tryPath);
+            break;
+          }
+        }
+      }
+
+      // Generate PDF from questionnaire responses if provided
+      let questionnaireFileData;
+      if (questionnaireResponses) {
+        const pdfResult = await generateQuestionnairePDF(
+          questionnaireResponses,
+          id,
+          assessment.participant
+        );
+        questionnaireFileData = {
+          fileName: pdfResult.filename,
+          filePath: pdfResult.filePath,
+          fileType: "application/pdf",
+        };
+      }
 
       // Update assessment status based on attendanceConfirmation and additional data
       let statusUpdate;
       if (
         attendanceConfirmation &&
-        presentationFile &&
-        questionnaireResponses
+        (presentationFileData || assessment.presentationFile) &&
+        (questionnaireResponses || assessment.questionnaireFile)
       ) {
         statusUpdate = "READY_FOR_ASSESSMENT";
-      } else if (attendanceConfirmation) {
+      } else if (
+        attendanceConfirmation ||
+        presentationFileData ||
+        assessment.presentationFile ||
+        questionnaireResponses ||
+        assessment.questionnaireFile
+      ) {
         statusUpdate = "TALENT_REQUIREMENTS";
       } else {
         statusUpdate = "CANCELED";
       }
 
-      // Update assessment status and additional fields
-      const updatedAssessment = await prisma.assessment.update({
-        where: { id },
-        data: {
-          attendanceConfirmation,
-          status: statusUpdate,
-          presentationFile: presentationFile
-            ? presentationFile
-            : assessment.presentationFile,
-          questionnaireResponses: questionnaireResponses
-            ? questionnaireResponses
-            : assessment.questionnaireResponses,
-        },
+      // Update assessment with transaction to ensure data consistency
+      const updatedAssessment = await prisma.$transaction(async (tx) => {
+        // Create new presentation file record if provided
+        let presentationFile = undefined;
+        if (presentationFileData) {
+          presentationFile = {
+            create: presentationFileData,
+          };
+        }
+
+        // Create new questionnaire file record if provided
+        let questionnaireFile = undefined;
+        if (questionnaireFileData) {
+          questionnaireFile = {
+            create: questionnaireFileData,
+          };
+        }
+
+        // Update assessment
+        return await tx.assessment.update({
+          where: { id },
+          data: {
+            attendanceConfirmation,
+            status: statusUpdate,
+            presentationFile,
+            questionnaireFile,
+            questionnaireResponses: questionnaireResponses || undefined,
+          },
+          include: {
+            presentationFile: true,
+            questionnaireFile: true,
+          },
+        });
       });
 
       console.log("Assessment submission updated");

@@ -1,25 +1,40 @@
 import express from "express";
 import { assessmentController } from "../../controllers/assessmentController.js";
 import { protect, authorize } from "../../middleware/auth.js";
+import { upload } from "../../utils/uploadConfig.js";
+import { handleFileDownload } from "../../utils/downloadConfig.js";
 
 const router = express.Router();
 
-// All routes require authentication
+// File download routes
+router.get("/download-nota-dinas/:filename", handleFileDownload("notaDinas"));
+router.get(
+  "/download-presentation/:filename",
+  handleFileDownload("presentation")
+);
+router.get(
+  "/download-questionnaire/:filename",
+  handleFileDownload("questionnaire")
+);
+router.get("/download-penilaian/:filename", handleFileDownload("penilaian"));
+
+// Authentication middleware for all routes below
 router.use(protect);
 
-// Assessment Routes - Available to both ADMINISTRATOR and USER
+// Read operations - Available to both ADMINISTRATOR and USER
 router.get("/", assessmentController.getAssessments);
-router.get("/:id", assessmentController.getAssessmentById);
 router.get(
   "/participant/:userId",
   assessmentController.getParticipantAssessments
 );
 router.get("/evaluator/:userId", assessmentController.getEvaluatorAssessments);
+router.get("/:id", assessmentController.getAssessmentById);
 
-// Assessment Routes - ADMINISTRATOR only
+// Write operations - ADMINISTRATOR only
 router.post(
   "/",
   authorize("ADMINISTRATOR"),
+  upload.notaDinas.single("notaDinas"),
   assessmentController.createAssessment
 );
 
@@ -41,9 +56,20 @@ router.delete(
   assessmentController.deleteAssessment
 );
 
+router.post(
+  "/:id/reset-status",
+  authorize("ADMINISTRATOR"),
+  assessmentController.resetAssessmentStatus
+);
+
+// Assessment process routes
 router.post("/:id/send-invitation", assessmentController.sendInvitation);
 
-router.put("/:id/requirement", assessmentController.updateAssessmentSubmission);
+router.put(
+  "/:id/requirement",
+  upload.presentation.single("presentationFile"),
+  assessmentController.updateAssessmentSubmission
+);
 
 router.put("/:id/start", assessmentController.startAssessment);
 

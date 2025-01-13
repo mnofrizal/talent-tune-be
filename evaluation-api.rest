@@ -1,0 +1,100 @@
+### Variables
+@baseUrl = http://localhost:2100/api/v1
+@authToken = {{login.response.body.data.accessToken}}
+
+### Login as Admin
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "admin@msdm.app",
+    "password": "admin123"
+}
+
+### Get All Evaluations
+GET {{baseUrl}}/evaluations
+Authorization: Bearer {{authToken}}
+
+### Get Evaluations with Filters
+GET {{baseUrl}}/evaluations?status=PENDING&assessmentId=1
+Authorization: Bearer {{authToken}}
+
+### Get Specific Evaluation by ID
+GET {{baseUrl}}/evaluations/1
+Authorization: Bearer {{authToken}}
+
+### Create a New Evaluation
+POST {{baseUrl}}/evaluations
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "assessmentId": 1,
+  "scores": {
+    "communication": 8,
+    "technicalSkills": 7,
+    "problemSolving": 9
+  },
+  "recommendation": "Strong candidate with good potential",
+  "status": "PENDING"
+}
+
+### Update an Existing Evaluation
+PUT {{baseUrl}}/evaluations/1
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "scores": {
+    "q1": {
+      "rating": "B",
+      "notes": ""
+    },
+    "q2": {
+      "rating": "B",
+      "notes": ""
+    },
+    "q3": {
+      "rating": "B",
+      "notes": ""
+    },
+    "q4": {
+      "rating": "B",
+      "notes": ""
+    }
+  },
+  "recommendation": "fwqgwtqe",
+  "status": "COMPLETED"
+}
+
+### Delete an Evaluation
+DELETE {{baseUrl}}/evaluations/1
+Authorization: Bearer {{authToken}}
+
+### Error Scenarios
+
+### Create Evaluation with Invalid Assessment ID
+POST {{baseUrl}}/evaluations
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "assessmentId": "invalid",
+  "scores": {
+    "communication": 8
+  }
+}
+
+### Update Evaluation with Invalid Status
+PATCH {{baseUrl}}/evaluations/1
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "status": "INVALID_STATUS"
+}
+
+### Delete Non-Existent Evaluation
+DELETE {{baseUrl}}/evaluations/9999
+Authorization: Bearer {{authToken}}

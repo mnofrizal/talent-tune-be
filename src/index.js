@@ -38,3 +38,7 @@ const PORT = process.env.PORT || 2100;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
