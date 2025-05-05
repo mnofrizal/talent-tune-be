@@ -69,6 +69,7 @@ const createAssessmentSchema = z.object({
       .array(participantScheduleSchema)
       .min(1, "At least one participant with schedule is required"),
     isActive: z.boolean().default(true),
+    // createdBy: z.number().int().positive().optional(),
   }),
   evaluators: z
     .array(evaluatorSchema)

@@ -101,8 +101,29 @@ export const assessmentController = {
   // Create new assessment
   async createAssessment(req, res) {
     try {
-      const validatedData = validateCreateAssessment(JSON.parse(req.body.data));
-      console.log({ validatedData });
+      console.log("Request body:", req.body);
+      console.log("File:", req.file);
+
+      if (!req.body.data) {
+        return res
+          .status(StatusCodes.BAD_REQUEST)
+          .json(errorResponse("Missing 'data' field in request body"));
+      }
+
+      let parsedData;
+      try {
+        parsedData = JSON.parse(req.body.data);
+        console.log("Parsed data:", parsedData);
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        return res
+          .status(StatusCodes.BAD_REQUEST)
+          .json(errorResponse("Invalid JSON format in data field"));
+      }
+
+      const validatedData = validateCreateAssessment(parsedData);
+      console.log("Validated data:", validatedData);
+
       const notaDinasFile = req.file;
       const result = await assessmentService.createAssessment(
         validatedData,
@@ -118,9 +139,10 @@ export const assessmentController = {
           )
         );
     } catch (error) {
+      console.error("Assessment creation error:", error);
       return res
         .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
-        .json(errorResponse(error.message));
+        .json(errorResponse(error.message || "Error creating assessments"));
     }
   },
 

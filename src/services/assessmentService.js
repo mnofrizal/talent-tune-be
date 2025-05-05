@@ -305,6 +305,12 @@ export const assessmentService = {
   // Create new assessment
   async createAssessment(data, notaDinasFile) {
     try {
+      console.log("Starting createAssessment with data:", JSON.stringify(data));
+      console.log(
+        "NotaDinasFile:",
+        notaDinasFile ? notaDinasFile.filename : "None"
+      );
+
       const { assessment, evaluators } = data;
       const { participants, ...assessmentData } = assessment;
 
@@ -315,6 +321,7 @@ export const assessmentService = {
           fileName: notaDinasFile.filename,
           filePath: notaDinasFile.filename,
         };
+        console.log("NotaDinas data:", notaDinasData);
       }
 
       // Get unique participant IDs
@@ -375,62 +382,88 @@ export const assessmentService = {
       const createdAssessments = await prisma.$transaction(async (tx) => {
         const assessments = [];
 
-        for (const participant of participants) {
-          // Create the assessment with individual schedule and notaDinas if provided
-          const newAssessment = await tx.assessment.create({
-            data: {
-              ...assessmentData,
-              schedule: new Date(participant.schedule),
-              participant: {
-                connect: { id: participant.participantId },
-              },
-              ...(notaDinasData && {
-                notaDinas: {
-                  create: notaDinasData,
-                },
-              }),
-            },
-          });
+        try {
+          for (const participant of participants) {
+            console.log("Processing participant:", participant);
 
-          // Create evaluations for each evaluator
-          await tx.evaluation.createMany({
-            data: evaluators.map((evaluator) => ({
-              assessmentId: newAssessment.id,
-              evaluatorId: evaluator.evaluatorId,
-              status: "PENDING",
-            })),
-          });
-
-          // Fetch the complete assessment with relations
-          const completeAssessment = await tx.assessment.findUnique({
-            where: { id: newAssessment.id },
-            include: {
-              participant: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  nip: true,
-                  jabatan: true,
-                  bidang: true,
+            // Create the assessment with individual schedule and notaDinas if provided
+            let newAssessment;
+            try {
+              const createData = {
+                ...assessmentData,
+                schedule: new Date(participant.schedule),
+                participant: {
+                  connect: { id: participant.participantId },
                 },
-              },
-              evaluations: {
-                include: {
-                  evaluator: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true,
-                      nip: true,
+                ...(notaDinasData && {
+                  notaDinas: {
+                    create: notaDinasData,
+                  },
+                }),
+              };
+
+              console.log(
+                "Creating assessment with data:",
+                JSON.stringify(createData)
+              );
+
+              newAssessment = await tx.assessment.create({
+                data: createData,
+              });
+
+              console.log("Assessment created:", newAssessment.id);
+            } catch (createError) {
+              console.error("Error creating assessment:", createError);
+              throw new CustomError(
+                `Error creating assessment: ${createError.message}`,
+                StatusCodes.BAD_REQUEST
+              );
+            }
+
+            // Create evaluations for each evaluator
+            await tx.evaluation.createMany({
+              data: evaluators.map((evaluator) => ({
+                assessmentId: newAssessment.id,
+                evaluatorId: evaluator.evaluatorId,
+                status: "PENDING",
+              })),
+            });
+
+            // Fetch the complete assessment with relations
+            const completeAssessment = await tx.assessment.findUnique({
+              where: { id: newAssessment.id },
+              include: {
+                participant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    nip: true,
+                    jabatan: true,
+                    bidang: true,
+                  },
+                },
+                evaluations: {
+                  include: {
+                    evaluator: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        nip: true,
+                      },
                     },
                   },
                 },
               },
-            },
-          });
+            });
 
-          assessments.push(completeAssessment);
+            assessments.push(completeAssessment);
+          }
+          return assessments;
+        } catch (txError) {
+          console.error("Transaction error:", txError);
+          throw txError;
         }
 
         return assessments;
